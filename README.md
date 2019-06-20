@@ -42,7 +42,7 @@ option("databaseNamePattern","xxxxx").
 option("tableNamePattern","xxxxx").
 load()
 
-df.writeStream.format("delta").save("....")
+df.writeStream.format("delta")....
 
 ```
 
