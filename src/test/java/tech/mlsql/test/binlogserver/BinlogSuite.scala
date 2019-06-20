@@ -4,11 +4,10 @@ import java.io.File
 import java.sql.{SQLException, Statement}
 import java.util.TimeZone
 
-
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource
 import org.apache.spark.sql.mlsql.sources.mysql.binlog._
-import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -128,6 +127,7 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
 
   test("read binlog and write original log to delta table") {
     failAfter(streamingTimeout) {
+      var offset = 0l
       withTempDirs { (outputDir, checkpointDir) =>
 
         val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
@@ -137,7 +137,7 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
         val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
         val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
         val df = DataSetHelper.create(spark, logicalPlan)
-        var offset = 0l
+
         testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
           AdvanceManualClock(5 * 1000),
           TriggerData(source, () => {
@@ -183,7 +183,33 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
         )
 
       }
+
+      // try again from offset, this means we should get update/delete log
+      withTempDirs { (outputDir, checkpointDir) =>
+
+        val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
+          "databaseNamePattern" -> "mbcj_test",
+          "tableNamePattern" -> "script_file",
+          "bingLogNamePrefix" -> "mysql-bin",
+          "startingOffsets" -> s"${offset}"
+        ))
+        val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
+        val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
+        val df = DataSetHelper.create(spark, logicalPlan)
+        testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
+          TriggerData(source, () => {
+            Thread.sleep(10 * 1000)
+          }),
+          AdvanceManualClock(5 * 1000),
+          AdvanceManualClock(5 * 1000),
+          CheckAnswerRowsByFunc(rows => {
+            assert(rows.size == 2)
+          }, false)
+        )
+
+      }
+
+
     }
   }
-
 }

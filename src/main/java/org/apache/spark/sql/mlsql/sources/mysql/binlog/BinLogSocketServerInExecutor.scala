@@ -15,8 +15,8 @@ import com.github.shyiko.mysql.binlog.event.deserialization.EventDeserializer
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.mlsql.sources.mysql.binlog.io.{DeleteRowsWriter, EventInfo, InsertRowsWriter, UpdateRowsWriter}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD}
+import org.apache.spark.sql.mlsql.sources.mysql.binlog.io.{DeleteRowsWriter, EventInfo, InsertRowsWriter, UpdateRowsWriter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.streaming.BinlogWriteAheadLog
 
@@ -38,6 +38,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
   private var currentBinlogFile: String = null
 
   private var currentBinlogPosition: Long = 4
+  private var nextBinlogPosition: Long = 4
 
   private val queue = new util.ArrayDeque[RawBinlogEvent]()
   private val writeAheadLog = {
@@ -151,6 +152,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         val eventType = header.getEventType
         if (eventType != ROTATE && eventType != FORMAT_DESCRIPTION) {
           currentBinlogPosition = header.getPosition
+          nextBinlogPosition = header.getNextPosition
         }
 
         eventType match {
@@ -357,7 +359,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           sendResponse(dOut, QueueSizeResponse(queue.size()))
         }
         case _: RequestOffset =>
-          sendResponse(dOut, OffsetResponse(BinlogOffset.fromFileAndPos(currentBinlogFile, currentBinlogPosition + 1).offset))
+          sendResponse(dOut, OffsetResponse(BinlogOffset.fromFileAndPos(currentBinlogFile, nextBinlogPosition).offset))
         case request: RequestData =>
           val start = request.startOffset
           val end = request.endOffset

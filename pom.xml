@@ -60,11 +60,6 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>tech.mlsql</groupId>
-            <artifactId>streamingpro-spark-common</artifactId>
-            <version>${mlsql.version}</version>
-        </dependency>
 
         <dependency>
             <groupId>tech.mlsql</groupId>
