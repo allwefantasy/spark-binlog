@@ -19,6 +19,11 @@ artifactId: spark-binlog_2.11
 version: 0.1.0
 ```
 
+## Limitation
+
+1. MySQL BinlogFormat should be set as "Row"
+2. Version 0.1.0 only support insert/update/delete events. The other events will ignore.
+
 ## Usage
 
 
