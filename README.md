@@ -6,6 +6,7 @@ for Spark SQL , DataFrames and [MLSQL](http://www.mlsql.tech).
 ## Requirements
 
 This library requires Spark 2.4+ (tested).
+Some older versions of Spark may work too but they are not officially supported.
 
 ## Liking 
 
