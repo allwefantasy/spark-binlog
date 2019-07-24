@@ -6,7 +6,7 @@
 
     <groupId>tech.mlsql</groupId>
     <artifactId>spark-binlog_2.11</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 
     <name>Spark MySQL Binlog DataSource</name>
     <url>https://github.com/allwefantasy/spark-binlog</url>
@@ -202,7 +202,7 @@
         <sourceDirectory>src/main/java/</sourceDirectory>
         <resources>
             <resource>
-                <directory>src/main/resources-${mode}</directory>
+                <directory>src/main/resources</directory>
             </resource>
         </resources>
         <plugins>

@@ -17,13 +17,13 @@ You can link against this library in your program at the following coordinates:
 ```sql
 groupId: tech.mlsql
 artifactId: spark-binlog_2.11
-version: 0.1.0
+version: 0.1.1
 ```
 
 ## Limitation
 
 1. MySQL BinlogFormat should be set as "Row"
-2. Version 0.1.0 only support insert/update/delete events. The other events will ignore.
+2. Version 0.1.1 only support insert/update/delete events. The other events will ignore.
 
 ## Usage
 
