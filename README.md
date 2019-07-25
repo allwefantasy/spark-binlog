@@ -17,7 +17,7 @@ You can link against this library in your program at the following coordinates:
 ```sql
 groupId: tech.mlsql
 artifactId: spark-binlog_2.11
-version: 0.1.1
+version: 0.1.2
 ```
 
 ## Limitation

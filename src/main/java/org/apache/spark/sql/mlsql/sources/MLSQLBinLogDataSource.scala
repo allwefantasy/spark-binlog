@@ -17,8 +17,8 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, TaskCompletionListener, TaskFailureListener}
 import org.apache.spark.{SparkEnv, TaskContext}
-import streaming.common.HDFSOperator
-import tech.mlsql.common.PathFun
+import tech.mlsql.common.utils.{HDFSOperator, PathFun}
+
 
 /**
   * This Datasource is used to consume MySQL binlog. Not support MariaDB yet because the connector we are using is

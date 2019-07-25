@@ -13,7 +13,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataSetHelper, SaveMode}
 import org.scalatest.time.SpanSugar._
-import tech.mlsql.common.ScalaReflect
+import tech.mlsql.common.utils.ScalaReflect
 
 /**
   * 2019-06-15 WilliamZhu(allwefantasy@gmail.com)
@@ -186,7 +186,7 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
 
       // try again from offset, this means we should get update/delete log
       withTempDirs { (outputDir, checkpointDir) =>
-
+        println(s"======${offset}=====")
         val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
           "databaseNamePattern" -> "mbcj_test",
           "tableNamePattern" -> "script_file",
