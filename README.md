@@ -63,7 +63,13 @@ and startingOffsets="40000000000004"
 and databaseNamePattern="mlsql_console"
 and tableNamePattern="script_file"
 as table1;
-```  
+```
+
+startingOffsetscan be replaced by `binlogIndex` and `binlogFileOffset`.
+
+`startingOffsets="40000000000004"`  equals `binlogIndex="4" and binlogFileOffset="4"`
+
+Notice that `binlogFileOffset` should be 4 in most case unless you have copied the startingOffsets from CK or logs.    
 
 [MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html) 
 

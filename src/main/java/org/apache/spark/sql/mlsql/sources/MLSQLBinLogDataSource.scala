@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import org.apache.commons.io.IOUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.mlsql.sources.mysql.binlog._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.mlsql.sources.mysql.binlog._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
@@ -60,7 +60,17 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val databaseNamePattern = parameters.get("databaseNamePattern")
     val tableNamePattern = parameters.get("tableNamePattern")
 
-    val startingOffsets = parameters.get("startingOffsets").map(f => LongOffset(f.toLong))
+    val startingOffsets = (parameters.get("startingOffsets") match {
+      case Some(value) => Option(value)
+      case None =>
+        (parameters.get("binlogIndex"), parameters.get("binlogFileOffset")) match {
+          case (Some(index), Some(pos)) => Option(BinlogOffset(index.toLong, pos.toLong).offset.toString)
+          case (Some(index), None) => Option(BinlogOffset(index.toLong, 4).offset.toString)
+          case _ => None
+        }
+    }).map(f => LongOffset(f.toLong))
+
+    parameters.get("startingOffsets").map(f => LongOffset(f.toLong))
 
     startingOffsets match {
       case Some(value) =>

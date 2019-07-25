@@ -209,6 +209,34 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
 
       }
 
+      // try again from offset, this means we should get update/delete log
+      withTempDirs { (outputDir, checkpointDir) =>
+        val binlogOffset = BinlogOffset.fromOffset(offset)
+        println(s"======${binlogOffset.fileId}=====")
+        println(s"======${binlogOffset.pos}=====")
+        val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
+          "databaseNamePattern" -> "mbcj_test",
+          "tableNamePattern" -> "script_file",
+          "bingLogNamePrefix" -> "mysql-bin",
+          "binlogIndex" -> s"${binlogOffset.fileId}",
+          "binlogFileOffset" -> s"${binlogOffset.pos}"
+        ))
+        val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
+        val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
+        val df = DataSetHelper.create(spark, logicalPlan)
+        testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
+          TriggerData(source, () => {
+            Thread.sleep(10 * 1000)
+          }),
+          AdvanceManualClock(5 * 1000),
+          AdvanceManualClock(5 * 1000),
+          CheckAnswerRowsByFunc(rows => {
+            assert(rows.size == 2)
+          }, false)
+        )
+
+      }
+
 
     }
   }
