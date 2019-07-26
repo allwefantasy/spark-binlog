@@ -2,6 +2,9 @@
 
 A library for querying MySQL Binlog with Apache Spark structure streaming, 
 for Spark SQL , DataFrames and [MLSQL](http://www.mlsql.tech).
+
+1. [jianshu: How spark-binlog works](https://www.jianshu.com/p/e7c3e84a0ea7)
+2. [medium: How spark-binlog works](https://medium.com/@williamsmith_74955/how-spark-binlog-works-323c16fb1498)
   
 ## Requirements
 
