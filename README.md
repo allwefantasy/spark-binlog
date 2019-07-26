@@ -41,12 +41,20 @@ option("userName","xxxxx").
 option("password","xxxxx").
 option("databaseNamePattern","xxxxx").
 option("tableNamePattern","xxxxx").
+optioin("binlogIndex","4").
+optioin("binlogFileOffset","4").
 load()
 
-df.writeStream.format("delta")....
+
+df.writeStream.
+format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
+option("idCols","id").
+checkpointLocation("/tmp/cpl-binlog2")
+.mode(OutputMode.Append).save("/tmp/binlog1/{db}/{table}")
 
 ```
 
+YOu can
 
 MLSQL:
 
