@@ -57,7 +57,7 @@ checkpointLocation("/tmp/cpl-binlog2")
 
 ```
 
-YOu can
+
 
 MLSQL:
 
@@ -80,9 +80,24 @@ startingOffsetscan be replaced by `binlogIndex` and `binlogFileOffset`.
 
 `startingOffsets="40000000000004"`  equals `binlogIndex="4" and binlogFileOffset="4"`
 
-Notice that `binlogFileOffset` should be 4 in most case unless you have copied the startingOffsets from CK or logs.    
+Notice that `binlogFileOffset` should be 4 in most case unless you have copied the startingOffsets from CK or logs.
 
-[MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html) 
+[MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html)
+
+## How to get the initial offset 
+
+If you are the first time to start spark-binlog, use command like following to get the offset you want:
+
+```
+mysqlbinlog \ 
+--start-datetime="2019-06-19 01:00:00" \ 
+--stop-datetime="2019-06-20 23:00:00" \ 
+--base64-output=decode-rows \
+-vv  master-bin.000004
+
+```    
+
+ 
 
 
 
