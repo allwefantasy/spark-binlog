@@ -10,7 +10,7 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.mlsql.sources.ExecutorInternalBinlogConsumer
-import tech.mlsql.common.utils.JsonUtils
+import tech.mlsql.common.utils.serder.json.JsonUtils
 
 
 object SocketServerInExecutor extends Logging {

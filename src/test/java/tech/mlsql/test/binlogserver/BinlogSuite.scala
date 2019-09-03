@@ -13,7 +13,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataSetHelper, SaveMode}
 import org.scalatest.time.SpanSugar._
-import tech.mlsql.common.utils.ScalaReflect
+import tech.mlsql.common.utils.lang.sc.ScalaReflect
 
 /**
   * 2019-06-15 WilliamZhu(allwefantasy@gmail.com)
