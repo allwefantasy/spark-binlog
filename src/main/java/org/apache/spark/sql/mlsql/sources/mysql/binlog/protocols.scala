@@ -1,6 +1,6 @@
 package org.apache.spark.sql.mlsql.sources.mysql.binlog
 
-import tech.mlsql.common.utils.JsonUtils
+import tech.mlsql.common.utils.serder.json.JsonUtils
 
 
 object BinlogOffset {
