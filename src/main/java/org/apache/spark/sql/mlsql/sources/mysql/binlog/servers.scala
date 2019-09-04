@@ -6,10 +6,11 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.mlsql.sources.ExecutorInternalBinlogConsumer
+import org.apache.spark.{SparkEnv, SparkException}
+import tech.mlsql.common.utils.network.NetUtils
 import tech.mlsql.common.utils.serder.json.JsonUtils
 
 
@@ -24,7 +25,20 @@ object SocketServerInExecutor extends Logging {
 
   def setupOneConnectionServer(threadName: String)
                               (func: Socket => Unit): (ServerSocket, String, Int) = {
-    val host = SparkEnv.get.rpcEnv.address.host
+
+    val host = if (SparkEnv.get == null) {
+      //When SparkEnv.get is null, the program may run in a test
+      //So return local address would be ok.
+      "127.0.0.1"
+    } else {
+      if (SparkEnv.get.rpcEnv.address != null) {
+        SparkEnv.get.rpcEnv.address.host
+      } else {
+        val hostName = tech.mlsql.common.utils.network.SparkExecutorInfo.getInstance.hostname
+        if (hostName == null) NetUtils.getHost else hostName
+      }
+    }
+
     val serverSocket: ServerSocket = new ServerSocket(0, 1, InetAddress.getByName(host))
     // Close the socket if no connection in 5 min
     serverSocket.setSoTimeout(1000 * 60 * 5)
@@ -56,7 +70,13 @@ object SocketServerInExecutor extends Logging {
       //So return local address would be ok.
       "127.0.0.1"
     } else {
-      SparkEnv.get.rpcEnv.address.host
+      if (SparkEnv.get.rpcEnv.address != null) {
+        SparkEnv.get.rpcEnv.address.host
+      } else {
+        val hostName = tech.mlsql.common.utils.network.SparkExecutorInfo.getInstance.hostname
+        if (hostName == null) NetUtils.getHost else hostName
+      }
+
     }
     val serverSocket: ServerSocket = new ServerSocket(0, 1, InetAddress.getByName(host))
     // throw exception if  the socket server have no connection in 5 min
