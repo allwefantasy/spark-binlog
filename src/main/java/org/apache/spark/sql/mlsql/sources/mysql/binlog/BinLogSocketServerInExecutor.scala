@@ -216,7 +216,8 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
       "url" -> s"jdbc:mysql://${connectionInfo.host}:${connectionInfo.port}",
       "user" -> connectionInfo.userName,
       "password" -> connectionInfo.password,
-      "dbtable" -> s"${table.databaseName}.${table.tableName}"
+      "dbtable" -> s"${table.databaseName}.${table.tableName}",
+      "driver" -> "com.mysql.jdbc.Driver"
     )
     val jdbcOptions = new JDBCOptions(parameters)
     val schema = JDBCRDD.resolveTable(jdbcOptions)
