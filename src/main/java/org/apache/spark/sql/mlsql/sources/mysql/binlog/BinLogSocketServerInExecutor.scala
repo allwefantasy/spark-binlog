@@ -41,6 +41,11 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
   private var nextBinlogPosition: Long = 4
 
   private val queue = new util.ArrayDeque[RawBinlogEvent]()
+
+  import java.util.concurrent.ConcurrentLinkedQueue
+
+  val flush_event_queue = new ConcurrentLinkedQueue[Int]()
+
   private val writeAheadLog = {
     val sparkEnv = SparkEnv.get
     val tmp = new BinlogWriteAheadLog(UUID.randomUUID().toString, sparkEnv.serializerManager, sparkEnv.conf, hadoopConf, checkpointDir)
@@ -103,6 +108,9 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         flushAheadLog
         //clean data before one hour
         writeAheadLog.cleanupOldBlocks(System.currentTimeMillis() - 1000 * 60 * 60)
+      }
+      if (aheadLogBuffer.size > 0 && flush_event_queue.poll() == 1) {
+        flushAheadLog
       }
     }
 
@@ -369,7 +377,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           try {
 
             if (isWriteAheadStorage) {
-              flushAheadLog
+              flush_event_queue.offer(1)
               writeAheadLog.read((records) => {
                 records.foreach { record =>
                   if (toOffset(record) >= start && toOffset(record) < end) {
