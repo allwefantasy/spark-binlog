@@ -42,9 +42,6 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   private val queue = new util.ArrayDeque[RawBinlogEvent]()
 
-  import java.util.concurrent.ConcurrentLinkedQueue
-
-  val flush_event_queue = new ConcurrentLinkedQueue[Int]()
 
   private val writeAheadLog = {
     val sparkEnv = SparkEnv.get
@@ -105,12 +102,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     val item = new RawBinlogEvent(event, currentTable, binLogFilename, eventType, currentBinlogPosition)
     if (isWriteAheadStorage) {
       if (aheadLogBuffer.size >= 1000) {
-        flushAheadLog
-        //clean data before one hour
         writeAheadLog.cleanupOldBlocks(System.currentTimeMillis() - 1000 * 60 * 60)
-      }
-      if (flush_event_queue.poll() == 1 && aheadLogBuffer.size > 0) {
-        flushAheadLog
       }
     }
 
@@ -368,7 +360,19 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           sendResponse(dOut, QueueSizeResponse(queue.size()))
         }
         case _: RequestOffset =>
-          sendResponse(dOut, OffsetResponse(BinlogOffset.fromFileAndPos(currentBinlogFile, nextBinlogPosition).offset))
+          val currentNextBinlogPosition = nextBinlogPosition
+          var count = 1000
+          while (aheadLogBuffer.last.getPos < currentNextBinlogPosition && count > 0) {
+            Thread.sleep(5)
+            count -= 1
+          }
+          if (count <= 0) {
+            logError(s"can not wait message in ${currentNextBinlogPosition}")
+          }
+          flushAheadLog
+          sendResponse(dOut, OffsetResponse(BinlogOffset.fromFileAndPos(currentBinlogFile, currentNextBinlogPosition).offset))
+
+
         case request: RequestData =>
           val start = request.startOffset
           val end = request.endOffset
@@ -377,7 +381,6 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           try {
 
             if (isWriteAheadStorage) {
-              flush_event_queue.offer(1)
               writeAheadLog.read((records) => {
                 records.foreach { record =>
                   if (toOffset(record) >= start && toOffset(record) < end) {
