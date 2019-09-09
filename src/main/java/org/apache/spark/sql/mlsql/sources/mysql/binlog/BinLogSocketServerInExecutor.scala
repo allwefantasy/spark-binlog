@@ -38,6 +38,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
   private var currentBinlogFile: String = null
 
   private var currentBinlogPosition: Long = 4
+  private var currentBinlogPositionConsumeFlag: Boolean = false
   private var nextBinlogPosition: Long = 4
 
   private val queue = new util.ArrayDeque[RawBinlogEvent]()
@@ -57,7 +58,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   private var connect: MySQLConnectionInfo = null
 
-  private var aheadLogBuffer = ArrayBuffer[RawBinlogEvent]()
+  private val aheadLogBuffer = new java.util.concurrent.ConcurrentLinkedDeque[RawBinlogEvent]()
 
 
   @volatile private var skipTable = false
@@ -91,8 +92,14 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   def flushAheadLog = {
     synchronized {
-      writeAheadLog.write(aheadLogBuffer)
-      aheadLogBuffer.clear()
+      var buff = new ArrayBuffer[RawBinlogEvent]()
+      var item = aheadLogBuffer.poll()
+      buff += item
+      while (item != null) {
+        item = aheadLogBuffer.poll()
+        buff += item
+      }
+      writeAheadLog.write(buff)
     }
 
   }
@@ -102,12 +109,13 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     val item = new RawBinlogEvent(event, currentTable, binLogFilename, eventType, currentBinlogPosition)
     if (isWriteAheadStorage) {
       if (aheadLogBuffer.size >= 1000) {
+        flushAheadLog
         writeAheadLog.cleanupOldBlocks(System.currentTimeMillis() - 1000 * 60 * 60)
       }
     }
 
     if (isWriteAheadStorage) {
-      aheadLogBuffer += item
+      aheadLogBuffer.offer(item)
     }
 
     if (!isWriteAheadStorage) {
@@ -152,6 +160,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         val eventType = header.getEventType
         if (eventType != ROTATE && eventType != FORMAT_DESCRIPTION) {
           currentBinlogPosition = header.getPosition
+          currentBinlogPositionConsumeFlag = false
           nextBinlogPosition = header.getNextPosition
         }
 
@@ -204,7 +213,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
             currentBinlogPosition = rotateEventData.getBinlogPosition
           case _ =>
         }
-
+        currentBinlogPositionConsumeFlag = true
       }
     })
 
@@ -361,16 +370,11 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         }
         case _: RequestOffset =>
           val currentNextBinlogPosition = nextBinlogPosition
-
-
+          // we should wait until currentBinlog been consumed
+          // maybe at the same time, the currentBinlogPosition and  nextBinlogPosition have changed
+          // that's ok,  we just need make sure all consumed
           var count = 1000
-
-          while (aheadLogBuffer.size == 0) {
-            Thread.sleep(5)
-            count -= 1
-          }
-
-          while (aheadLogBuffer.size > 0 && aheadLogBuffer.last.getPos < currentNextBinlogPosition && count > 0) {
+          while (!currentBinlogPositionConsumeFlag) {
             Thread.sleep(5)
             count -= 1
           }
