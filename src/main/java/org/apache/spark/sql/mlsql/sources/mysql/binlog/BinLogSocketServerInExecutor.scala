@@ -109,7 +109,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         //clean data before one hour
         writeAheadLog.cleanupOldBlocks(System.currentTimeMillis() - 1000 * 60 * 60)
       }
-      if (aheadLogBuffer.size > 0 && flush_event_queue.poll() == 1) {
+      if (flush_event_queue.poll() == 1 && aheadLogBuffer.size > 0) {
         flushAheadLog
       }
     }
