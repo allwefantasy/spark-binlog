@@ -361,8 +361,16 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         }
         case _: RequestOffset =>
           val currentNextBinlogPosition = nextBinlogPosition
+
+
           var count = 1000
-          while (aheadLogBuffer.last.getPos < currentNextBinlogPosition && count > 0) {
+
+          while (aheadLogBuffer.size == 0) {
+            Thread.sleep(5)
+            count -= 1
+          }
+
+          while (aheadLogBuffer.size > 0 && aheadLogBuffer.last.getPos < currentNextBinlogPosition && count > 0) {
             Thread.sleep(5)
             count -= 1
           }
