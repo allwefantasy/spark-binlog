@@ -98,7 +98,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         buff += item
         item = aheadLogBuffer.poll()
       }
-      if (!buff.isEmpty){
+      if (!buff.isEmpty) {
         writeAheadLog.write(buff)
       }
     }
