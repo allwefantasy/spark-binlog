@@ -94,12 +94,13 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     synchronized {
       var buff = new ArrayBuffer[RawBinlogEvent]()
       var item = aheadLogBuffer.poll()
-      buff += item
       while (item != null) {
-        item = aheadLogBuffer.poll()
         buff += item
+        item = aheadLogBuffer.poll()
       }
-      writeAheadLog.write(buff)
+      if (!buff.isEmpty){
+        writeAheadLog.write(buff)
+      }
     }
 
   }
@@ -140,7 +141,9 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     }
 
     connect.recordPos match {
-      case Some(recordPos) => binaryLogClient.setBinlogPosition(recordPos)
+      case Some(recordPos) =>
+        binaryLogClient.setBinlogPosition(recordPos)
+        nextBinlogPosition = recordPos
       case _ =>
     }
 
