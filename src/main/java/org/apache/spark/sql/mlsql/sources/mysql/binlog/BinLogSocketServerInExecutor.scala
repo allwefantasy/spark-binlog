@@ -132,7 +132,6 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   private def _connectMySQL(connect: MySQLConnectionInfo) = {
     binaryLogClient = new BinaryLogClient(connect.host, connect.port, connect.userName, connect.password)
-
     connect.binlogFileName match {
       case Some(filename) =>
         binaryLogClient.setBinlogFilename(filename)
@@ -140,10 +139,29 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
       case _ =>
     }
 
+    val blcProperties = connect.properties.get
+    if (blcProperties.contains("heartbeatInterval")) {
+      binaryLogClient.setHeartbeatInterval(blcProperties("heartbeatInterval").toLong)
+    }
+    if (blcProperties.contains("blocking")) {
+      binaryLogClient.setBlocking(blcProperties("blocking").toBoolean)
+    }
+
+    if (blcProperties.contains("connectTimeout")) {
+      binaryLogClient.setConnectTimeout(blcProperties("connectTimeout").toLong)
+    }
+
+    if (blcProperties.contains("keepAlive")) {
+      binaryLogClient.setKeepAlive(blcProperties("keepAlive").toBoolean)
+    }
+
+
     connect.recordPos match {
       case Some(recordPos) => binaryLogClient.setBinlogPosition(recordPos)
       case _ =>
     }
+
+    binaryLogClient.getHeartbeatInterval
 
     val eventDeserializer = new EventDeserializer()
     eventDeserializer.setCompatibilityMode(

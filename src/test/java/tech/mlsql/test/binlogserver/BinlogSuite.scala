@@ -240,4 +240,9 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
 
     }
   }
+
+  test("test") {
+    println(Map("binaryLogClient.setWow" -> "100").filter(f => f._1.startsWith("binaryLogClient.")).
+      map(f => (f._1.substring("binaryLogClient.".length), f._2)).toMap)
+  }
 }

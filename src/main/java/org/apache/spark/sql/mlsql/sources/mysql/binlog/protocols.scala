@@ -33,7 +33,8 @@ case class MySQLConnectionInfo(host: String, port: Int, userName: String, passwo
                                binlogFileName: Option[String],
                                recordPos: Option[Long],
                                databaseNamePattern: Option[String] = None,
-                               tableNamePattern: Option[String] = None
+                               tableNamePattern: Option[String] = None,
+                               properties: Option[Map[String, String]] = None
                               )
 
 case class TableInfoCacheKey(databaseName: String, tableName: String, tableId: Long)

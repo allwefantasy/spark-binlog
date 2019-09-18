@@ -130,6 +130,9 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val hadoopConfig = spark.sparkContext.hadoopConfiguration
     val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
+    val binaryLogClientParameters = parameters.filter(f => f._1.startsWith("binaryLogClient.")).
+      map(f => (f._1.substring("binaryLogClient.".length), f._2)).toMap
+
     def launchBinlogServer = {
       spark.sparkContext.setJobGroup(binlogServerId, s"binlog server (${bingLogHost}:${bingLogPort})", true)
       spark.sparkContext.parallelize(Seq("launch-binlog-socket-server"), 1).map { item =>
@@ -179,7 +182,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
           bingLogHost, bingLogPort,
           bingLogUserName, bingLogPassword,
           binlogFilename, binlogPos,
-          databaseNamePattern, tableNamePattern), async = true)
+          databaseNamePattern, tableNamePattern, Option(binaryLogClientParameters)), async = true)
 
         while (!TaskContext.get().isInterrupted() && !executorBinlogServer.isClosed) {
           Thread.sleep(1000)
