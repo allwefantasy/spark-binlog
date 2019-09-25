@@ -20,7 +20,7 @@ You can link against this library in your program at the following coordinates:
 ```sql
 groupId: tech.mlsql
 artifactId: spark-binlog_2.11
-version: 0.1.2
+version: 0.1.9
 ```
 
 ## Limitation
@@ -51,9 +51,8 @@ load()
 
 df.writeStream.
 format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
-option("idCols","id").
 checkpointLocation("/tmp/cpl-binlog2")
-.mode(OutputMode.Append).save("/tmp/binlog1/{db}/{table}")
+.mode(OutputMode.Append).save("/tmp/binlog1/table1")
 
 ```
 
@@ -95,7 +94,19 @@ mysqlbinlog \
 --base64-output=decode-rows \
 -vv  master-bin.000004
 
-```    
+```  
+
+## Questions
+
+People may meet some log like following:
+
+```
+Trying to restore lost connectioin to .....
+Connected to ....
+```
+
+Please check the server_id is configured in my.cnf of your MySQL Server. 
+  
 
  
 
