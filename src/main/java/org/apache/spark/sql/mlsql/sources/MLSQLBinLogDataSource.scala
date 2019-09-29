@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import com.github.shyiko.mysql.binlog.network.ServerException
 import org.apache.commons.io.IOUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -139,11 +140,16 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
 
         val taskContextRef: AtomicReference[TaskContext] = new AtomicReference[TaskContext]()
         taskContextRef.set(TaskContext.get())
-
+        val BAD_BINLOG_ERROR_CODE = 1236
         val executorBinlogServer = new BinLogSocketServerInExecutor(taskContextRef, checkPointDir, broadcastedHadoopConf.value)
         executorBinlogServer.setMaxBinlogQueueSize(maxBinlogQueueSize)
         executorBinlogServer.onMySQLCommunicationFailure = (ex: Exception) => {
-          throw new RuntimeException(ex)
+          if (ex.isInstanceOf[ServerException]) {
+            if (ex.asInstanceOf[ServerException].getErrorCode() == BAD_BINLOG_ERROR_CODE) {
+              throw new RuntimeException(ex)
+            }
+          }
+          ex.printStackTrace()
         }
 
         def sendStopBinlogServerRequest = {
