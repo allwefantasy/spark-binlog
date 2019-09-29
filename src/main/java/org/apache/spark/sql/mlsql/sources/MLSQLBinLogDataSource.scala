@@ -142,6 +142,9 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
 
         val executorBinlogServer = new BinLogSocketServerInExecutor(taskContextRef, checkPointDir, broadcastedHadoopConf.value)
         executorBinlogServer.setMaxBinlogQueueSize(maxBinlogQueueSize)
+        executorBinlogServer.onMySQLCommunicationFailure = (ex: Exception) => {
+          throw new RuntimeException(ex)
+        }
 
         def sendStopBinlogServerRequest = {
           // send signal to stop server

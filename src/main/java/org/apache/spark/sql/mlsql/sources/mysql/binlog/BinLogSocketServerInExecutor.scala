@@ -130,6 +130,18 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     }
   }
 
+  var onMySQLCommunicationFailure = (ex: Exception) => {
+    logError("OnMySQLCommunicationFailure", ex)
+  }
+
+  var onMySQLConnect = () => {}
+
+  var onMySQLDisConnect = () => {}
+
+  var onMySQLEventDeserializationFailure = (ex: Exception) => {
+    logError("onMySQLEventDeserializationFailure", ex)
+  }
+
   private def _connectMySQL(connect: MySQLConnectionInfo) = {
     binaryLogClient = new BinaryLogClient(connect.host, connect.port, connect.userName, connect.password)
     connect.binlogFileName match {
@@ -170,7 +182,23 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
     )
     binaryLogClient.setEventDeserializer(eventDeserializer)
 
+    binaryLogClient.registerLifecycleListener(new BinaryLogClient.LifecycleListener() {
+      override def onCommunicationFailure(client: BinaryLogClient, ex: Exception): Unit = {
+        onMySQLCommunicationFailure(ex)
+      }
 
+      override def onConnect(client: BinaryLogClient): Unit = {
+        onMySQLConnect()
+      }
+
+      override def onEventDeserializationFailure(client: BinaryLogClient, ex: Exception): Unit = {
+        onMySQLEventDeserializationFailure(ex)
+      }
+
+      override def onDisconnect(client: BinaryLogClient): Unit = {
+        onMySQLDisConnect()
+      }
+    })
 
     //for now, we only care insert/update/delete three kinds of event
     binaryLogClient.registerEventListener(new BinaryLogClient.EventListener() {
