@@ -3,13 +3,14 @@ package org.apache.spark.sql.mlsql.sources
 import java.io._
 import java.net.Socket
 import java.nio.charset.StandardCharsets
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import com.github.shyiko.mysql.binlog.network.ServerException
 import org.apache.commons.io.IOUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.mlsql.sources.mysql.binlog._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
@@ -131,8 +132,8 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val hadoopConfig = spark.sparkContext.hadoopConfiguration
     val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
-    val binaryLogClientParameters = parameters.filter(f => f._1.startsWith("binaryLogClient.")).
-      map(f => (f._1.substring("binaryLogClient.".length), f._2)).toMap
+    val binaryLogClientParameters = new CaseInsensitiveMap[String](parameters.filter(f => f._1.startsWith("binaryLogClient.".toLowerCase(Locale.ROOT))).
+      map(f => (f._1.substring("binaryLogClient.".length), f._2)).toMap)
 
     def launchBinlogServer = {
       spark.sparkContext.setJobGroup(binlogServerId, s"binlog server (${bingLogHost}:${bingLogPort})", true)
