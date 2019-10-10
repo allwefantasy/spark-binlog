@@ -132,7 +132,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val hadoopConfig = spark.sparkContext.hadoopConfiguration
     val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
-    val binaryLogClientParameters = new CaseInsensitiveMap[String](parameters.filter(f => f._1.startsWith("binaryLogClient.".toLowerCase(Locale.ROOT))).
+    val binaryLogClientParameters = CaseInsensitiveMap[String](parameters.filter(f => f._1.startsWith("binaryLogClient.".toLowerCase(Locale.ROOT))).
       map(f => (f._1.substring("binaryLogClient.".length), f._2)).toMap)
 
     def launchBinlogServer = {
