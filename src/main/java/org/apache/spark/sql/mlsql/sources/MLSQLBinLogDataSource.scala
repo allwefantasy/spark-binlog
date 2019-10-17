@@ -3,8 +3,8 @@ package org.apache.spark.sql.mlsql.sources
 import java.io._
 import java.net.Socket
 import java.nio.charset.StandardCharsets
-import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.{Locale, UUID}
 
 import com.github.shyiko.mysql.binlog.network.ServerException
 import org.apache.commons.io.IOUtils
@@ -122,9 +122,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val tempSocketServerHost = tempSocketServerInDriver.host
     val tempSocketServerPort = tempSocketServerInDriver.port
 
-    // We will buffer the binlog in Executor, if the buffer is greater then maxBinlogQueueSize, just
-    // pause the MySQL binlog consumer, and stop put more data into buffer.
-    // When the buffer is maxBinlogQueueSize/2 ,resume the binlog consumer
+
     val maxBinlogQueueSize = parameters.getOrElse("maxBinlogQueueSize", "500000").toLong
 
     val binlogServerId = UUID.randomUUID().toString
@@ -363,6 +361,9 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
 
     val executorBinlogServerCopy = executorBinlogServer.copy()
 
+    // Here we only use one partition to fetch data from binlog server.
+    // The socket may be broken because we fetch all data in memory.
+    // todo: optimize the way to fetch data
     val rdd = spark.sparkContext.parallelize(Seq("fetch-bing-log"), 1).mapPartitions { iter =>
       val consumer = ExecutorBinlogServerConsumerCache.acquire(executorBinlogServerCopy)
       consumer.fetchData(fromPartitionOffsets.get, untilPartitionOffsets.get).toIterator
@@ -401,6 +402,7 @@ case class ExecutorInternalBinlogConsumer(executorBinlogServer: ExecutorBinlogSe
       sendRequest(dOut, RequestData(
         start.offset,
         end.offset))
+      // todo: optimize the way to fetch data
       val response = readResponse(dIn)
       response.asInstanceOf[DataResponse].data
     } finally {
