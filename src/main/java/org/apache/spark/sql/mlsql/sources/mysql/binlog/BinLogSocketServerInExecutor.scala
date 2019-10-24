@@ -269,7 +269,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   def loadSchemaInfo(connectionInfo: MySQLConnectionInfo, table: TableInfoCacheKey): StructType = {
     val parameters = Map(
-      "url" -> s"jdbc:mysql://${connectionInfo.host}:${connectionInfo.port}",
+      "url" -> s"jdbc:mysql://${connectionInfo.host}:${connectionInfo.port}?useUnicode=true&zeroDateTimeBehavior=convertToNull&characterEncoding=UTF-8&tinyInt1isBit=false",
       "user" -> connectionInfo.userName,
       "password" -> connectionInfo.password,
       "dbtable" -> s"${table.databaseName}.${table.tableName}",
