@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 /**
-  * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
-  */
+ * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
+ */
 class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String,
                                       hadoopConf: Configuration, isWriteAheadStorage: Boolean = true)
   extends SocketServerInExecutor[T](taskContextRef, "binlog-socket-server-in-executor")
@@ -207,7 +207,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
         val eventType = header.getEventType
         if (eventType != ROTATE && eventType != FORMAT_DESCRIPTION) {
           currentBinlogPosition = header.getPosition
-          currentBinlogPositionConsumeFlag = false
+          currentBinlogPositionConsumeFlag = true
           nextBinlogPosition = header.getNextPosition
         }
 
@@ -260,7 +260,6 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
             currentBinlogPosition = rotateEventData.getBinlogPosition
           case _ =>
         }
-        currentBinlogPositionConsumeFlag = true
       }
     })
 
@@ -416,17 +415,16 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           sendResponse(dOut, QueueSizeResponse(queue.size()))
         }
         case _: RequestOffset =>
-          val currentNextBinlogPosition = nextBinlogPosition
-          // we should wait until currentBinlog been consumed
-          // maybe at the same time, the currentBinlogPosition and  nextBinlogPosition have changed
-          // that's ok,  we just need make sure all consumed
-          var count = 1000
-          while (!currentBinlogPositionConsumeFlag) {
-            Thread.sleep(5)
+          var count = 5
+          while (!currentBinlogPositionConsumeFlag && count > 0) {
+            Thread.sleep(1000)
             count -= 1
           }
+
+          val currentNextBinlogPosition = if (nextBinlogPosition == 4) currentBinlogPosition else nextBinlogPosition;
+
           if (count <= 0) {
-            logError(s"can not wait message in ${currentNextBinlogPosition}")
+            logInfo(s"Can not wait message in ${currentNextBinlogPosition}")
           }
           flushAheadLog
           sendResponse(dOut, OffsetResponse(BinlogOffset.fromFileAndPos(currentBinlogFile, currentNextBinlogPosition).offset))
