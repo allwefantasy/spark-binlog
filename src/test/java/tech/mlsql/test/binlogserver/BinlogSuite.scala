@@ -186,11 +186,15 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
               """
                 |update script_file set name="jack3" where name="jack2"
               """.stripMargin)
+            addData(
+              """
+                |update script_file set name="jack3" where name="jack2"
+              """.stripMargin)
             Thread.sleep(5 * 1000)
           }),
           AdvanceManualClock(5 * 1000),
           CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 1)
+            assert(rows.size == 2)
             assert(rows(0).getString(0).contains("jack3"))
           }, true),
           TriggerData(source, () => {
@@ -217,137 +221,7 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
     }
   }
 
-  test("read binlog and write original log to delta table") {
-    failAfter(streamingTimeout) {
-      var offset = 0l
-      withTempDirs { (outputDir, checkpointDir) =>
-        var binlogNamePrefix = ""
-        var binlogIndex = 4;
-        var binlogFileOffset = 4l;
-
-        master.query("show master status;", new MySQLConnection.Callback[ResultSet] {
-          override def execute(obj: ResultSet): Unit = {
-            obj.next()
-            val Array(_binlogNamePrefix, _binlogIndex) = obj.getString("File").split("\\.")
-            binlogIndex = _binlogIndex.toInt
-            binlogNamePrefix = _binlogNamePrefix
-            binlogFileOffset = obj.getLong("Position")
-          }
-        })
-
-        val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
-          "databaseNamePattern" -> "mbcj_test",
-          "tableNamePattern" -> "script_file",
-          "bingLogNamePrefix" -> s"${binlogNamePrefix}",
-          "binlogIndex" -> s"${binlogIndex}",
-          "binlogFileOffset" -> s"${binlogFileOffset}"
-        ))
-        val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
-        val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
-        val df = DataSetHelper.create(spark, logicalPlan)
-
-        testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
-          AdvanceManualClock(5 * 1000),
-          TriggerData(source, () => {
-            addData(
-              """
-                |insert into script_file (name,has_caret) values ("jack2",1)
-              """.stripMargin)
-            // make sure MySQL binlog can be consumed into queue, and the lastest offset will not change again
-            // otherwize the CheckNewAnswerRows will block
-            //
-            Thread.sleep(5 * 1000)
-          }),
-          AdvanceManualClock(5 * 1000),
-          CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 1)
-            assert(rows(0).getString(0).contains("jack2"))
-          }, true),
-          TriggerData(source, () => {
-            offset = source.getOffset.get.asInstanceOf[LongOffset].offset
-            addData(
-              """
-                |update script_file set name="jack3" where name="jack2"
-              """.stripMargin)
-            Thread.sleep(5 * 1000)
-          }),
-          AdvanceManualClock(5 * 1000),
-          CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 1)
-            assert(rows(0).getString(0).contains("jack3"))
-          }, true),
-          TriggerData(source, () => {
-            addData(
-              """
-                |delete from script_file where name="jack3"
-              """.stripMargin)
-            Thread.sleep(5 * 1000)
-          }),
-          AdvanceManualClock(5 * 1000),
-          CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 1)
-            assert(rows(0).getString(0).contains("jack3"))
-          }, true)
-        )
-
-      }
-
-      // try again from offset, this means we should get update/delete log
-      withTempDirs { (outputDir, checkpointDir) =>
-        println(s"======${offset}=====")
-        val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
-          "databaseNamePattern" -> "mbcj_test",
-          "tableNamePattern" -> "script_file",
-          "bingLogNamePrefix" -> "mysql-bin",
-          "startingOffsets" -> s"${offset}"
-        ))
-        val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
-        val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
-        val df = DataSetHelper.create(spark, logicalPlan)
-        testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
-          TriggerData(source, () => {
-            Thread.sleep(10 * 1000)
-          }),
-          AdvanceManualClock(5 * 1000),
-          AdvanceManualClock(5 * 1000),
-          CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 2)
-          }, false)
-        )
-
-      }
-
-      // try again from offset, this means we should get update/delete log
-      withTempDirs { (outputDir, checkpointDir) =>
-        val binlogOffset = BinlogOffset.fromOffset(offset)
-        println(s"======${binlogOffset.fileId}=====")
-        println(s"======${binlogOffset.pos}=====")
-        val source = new MLSQLBinLogDataSource().createSource(spark.sqlContext, checkpointDir.getCanonicalPath, Some(StructType(Seq(StructField("value", StringType)))), "binlog", parameters ++ Map(
-          "databaseNamePattern" -> "mbcj_test",
-          "tableNamePattern" -> "script_file",
-          "bingLogNamePrefix" -> "mysql-bin",
-          "binlogIndex" -> s"${binlogOffset.fileId}",
-          "binlogFileOffset" -> s"${binlogOffset.pos}"
-        ))
-        val attributes = ScalaReflect.fromInstance[StructType](source.schema).method("toAttributes").invoke().asInstanceOf[Seq[AttributeReference]]
-        val logicalPlan = StreamingExecutionRelation(source, attributes)(sqlContext.sparkSession)
-        val df = DataSetHelper.create(spark, logicalPlan)
-        testStream(df, OutputMode.Append())(StartStream(Trigger.ProcessingTime("5 seconds"), new StreamManualClock),
-          TriggerData(source, () => {
-            Thread.sleep(10 * 1000)
-          }),
-          AdvanceManualClock(5 * 1000),
-          AdvanceManualClock(5 * 1000),
-          CheckAnswerRowsByFunc(rows => {
-            assert(rows.size == 2)
-          }, false)
-        )
-
-      }
-
-
-    }
-  }
+  
 
   test("test") {
     println(Map("binaryLogClient.setWow" -> "100").filter(f => f._1.startsWith("binaryLogClient.")).
