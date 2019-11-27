@@ -366,7 +366,7 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
     // todo: optimize the way to fetch data
     val rdd = spark.sparkContext.parallelize(Seq("fetch-bing-log"), 1).mapPartitions { iter =>
       val consumer = ExecutorBinlogServerConsumerCache.acquire(executorBinlogServerCopy)
-      consumer.fetchData(fromPartitionOffsets.get, untilPartitionOffsets.get).toIterator
+      consumer.fetchData(fromPartitionOffsets.get, untilPartitionOffsets.get)
     }.map { cr =>
       InternalRow(UTF8String.fromString(cr))
     }
@@ -403,8 +403,10 @@ case class ExecutorInternalBinlogConsumer(executorBinlogServer: ExecutorBinlogSe
         start.offset,
         end.offset))
       // todo: optimize the way to fetch data
-      val response = readResponse(dIn)
-      response.asInstanceOf[DataResponse].data
+      //      val response = readResponse(dIn)
+      val response = readIteratedResponse(dIn)
+      //      response.asInstanceOf[DataResponse].data
+      response.flatMap(f=>f.asInstanceOf[DataResponse].data)
     } finally {
       ExecutorBinlogServerConsumerCache.release(this)
     }

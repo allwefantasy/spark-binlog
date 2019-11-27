@@ -124,3 +124,9 @@ case class BinlogSocketRequest(
     }
   }
 }
+
+object SocketReplyMark {
+  val HEAD = -2 // 交付开始
+  val END = -1 // 交付结束
+}
+
