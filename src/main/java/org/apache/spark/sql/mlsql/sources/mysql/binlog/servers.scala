@@ -166,6 +166,62 @@ trait BinLogSocketServerSerDer {
     val response = JsonUtils.fromJson[BinlogSocketResponse](new String(bytes, StandardCharsets.UTF_8)).unwrap
     response
   }
+
+  def sendMark(dOut: DataOutputStream, mark:Int): Unit = {
+    dOut.writeInt(mark)
+    dOut.flush()
+  }
+
+  def iterativeSendData(dOut: DataOutputStream, response: Response) = {
+    val bytes = response.json.getBytes(StandardCharsets.UTF_8)
+    dOut.writeInt(bytes.length)
+    dOut.write(bytes)
+    dOut.flush()
+  }
+
+  def readIteratedResponse(dIn: DataInputStream): Iterator[Response] = {
+
+    new Iterator[Response]() {
+      private var dataOrMark = SocketReplyMark.HEAD
+      private var nextObj: Response = _
+      private var eos = false
+      override def hasNext: Boolean = nextObj != null || {
+        if ( !eos ) {
+          dataOrMark = dIn.readInt
+          def next(mark : Int) : Boolean = {
+            mark match {
+              case SocketReplyMark.END =>
+                eos = true // eos=true !!!
+                false  // 结束位
+              case SocketReplyMark.HEAD => // 开始位 需要继续读一位
+                dataOrMark = dIn.readInt // 长度位 or end
+                next(dataOrMark)
+              case _ =>
+                val bytes = new Array[Byte](dataOrMark)
+                dIn.readFully(bytes, 0, dataOrMark)
+                val response = JsonUtils.fromJson[BinlogSocketResponse](new String(bytes, StandardCharsets.UTF_8)).unwrap
+                nextObj = response
+                true
+            }
+          }
+          next(dataOrMark)
+        } else {
+          false
+        }
+      }
+
+      override def next(): Response = {
+        if (hasNext) {
+          val obj = nextObj
+          nextObj = null.asInstanceOf[Response]
+          obj
+        } else {
+          Iterator.empty.next()
+        }
+      }
+    }
+  }
+
 }
 
 object BinLogSocketServerCommand extends BinLogSocketServerSerDer {

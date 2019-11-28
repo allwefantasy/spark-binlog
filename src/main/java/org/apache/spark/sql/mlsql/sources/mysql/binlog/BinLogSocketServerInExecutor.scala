@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
- */
+  * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
+  */
 class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String,
                                       hadoopConf: Configuration, isWriteAheadStorage: Boolean = true)
   extends SocketServerInExecutor[T](taskContextRef, "binlog-socket-server-in-executor")
@@ -434,31 +434,36 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
           val start = request.startOffset
           val end = request.endOffset
 
-          val res = ArrayBuffer[String]()
+          //          val res = ArrayBuffer[String]()
           try {
 
             if (isWriteAheadStorage) {
+              sendMark(dOut, SocketReplyMark.HEAD) // 先发一个开始位
               writeAheadLog.read((records) => {
                 records.foreach { record =>
                   if (toOffset(record) >= start && toOffset(record) < end) {
-                    res ++= convertRawBinlogEventRecord(record).asScala
+                    //                    res ++= convertRawBinlogEventRecord(record).asScala
+                    iterativeSendData(dOut, DataResponse(convertRawBinlogEventRecord(record).asScala.toList))
                   }
                 }
               })
+              sendMark(dOut, SocketReplyMark.END) // 再发一个结束位
             } else {
+              sendMark(dOut, SocketReplyMark.HEAD)
               var item: RawBinlogEvent = queue.poll()
               while (item != null && toOffset(item) >= start && toOffset(item) < end) {
-                res ++= convertRawBinlogEventRecord(item).asScala
+                iterativeSendData(dOut, DataResponse(convertRawBinlogEventRecord(item).asScala.toList))
                 item = queue.poll()
                 currentQueueSize.decrementAndGet()
               }
+              sendMark(dOut, SocketReplyMark.END)
             }
 
           } catch {
             case e: Exception =>
               logError("", e)
           }
-          sendResponse(dOut, DataResponse(res.toList))
+        //          sendResponse(dOut, DataResponse(res.toList))
       }
     }
 
