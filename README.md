@@ -42,15 +42,20 @@ option("host","127.0.0.1").
 option("port","3306").
 option("userName","xxxxx").
 option("password","xxxxx").
-option("databaseNamePattern","xxxxx").
-option("tableNamePattern","xxxxx").
+option("databaseNamePattern","mlsql_console").
+option("tableNamePattern","script_file").
 optioin("binlogIndex","4").
 optioin("binlogFileOffset","4").
 load()
 
 
 df.writeStream.
-format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
+format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource"). 
+option("mysql_{db}.{table}").
+option("mode","Append").
+option("idCols","id").
+option("duration","5").
+option("syncType","binlog").
 checkpointLocation("/tmp/cpl-binlog2")
 .mode(OutputMode.Append).save("/tmp/binlog1/table1")
 
@@ -66,20 +71,24 @@ set streamName="binlog";
 load binlog.`` where 
 host="127.0.0.1"
 and port="3306"
-and userName="xxx"
-and password="xxxx"
+and userName="xxxxx"
+and password="xxxxx"
 and bingLogNamePrefix="mysql-bin"
-and startingOffsets="40000000000004"
+and binlogIndex="4"
+and binlogFileOffset="4"
 and databaseNamePattern="mlsql_console"
 and tableNamePattern="script_file"
 as table1;
+
+save append table1  
+as rate.`mysql_{db}.{table}` 
+options mode="Append"
+and idCols="id"
+and duration="5"
+and syncType="binlog"
+and checkpointLocation="/tmp/cpl-binlog2";
 ```
 
-startingOffsetscan be replaced by `binlogIndex` and `binlogFileOffset`.
-
-`startingOffsets="40000000000004"`  equals `binlogIndex="4" and binlogFileOffset="4"`
-
-Notice that `binlogFileOffset` should be 4 in most case unless you have copied the startingOffsets from CK or logs.
 
 [MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html)
 
