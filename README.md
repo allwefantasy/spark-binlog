@@ -50,8 +50,9 @@ load()
 
 
 df.writeStream.
-format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource"). 
-option("/tmp/sync/tables/{db}/{table}").
+format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").  
+option("__path__","/tmp/sync/tables").
+option("path","{db}/{table}").
 option("mode","Append").
 option("idCols","id").
 option("duration","5").
