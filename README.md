@@ -51,7 +51,7 @@ load()
 
 df.writeStream.
 format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource"). 
-option("mysql_{db}.{table}").
+option("/tmp/sync/tables/{db}/{table}").
 option("mode","Append").
 option("idCols","id").
 option("duration","5").
