@@ -52,13 +52,12 @@ load()
 df.writeStream.
 format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").  
 option("__path__","/tmp/sync/tables").
-option("path","{db}/{table}").
 option("mode","Append").
 option("idCols","id").
 option("duration","5").
 option("syncType","binlog").
 checkpointLocation("/tmp/cpl-binlog2")
-.mode(OutputMode.Append).save("/tmp/binlog1/table1")
+.mode(OutputMode.Append).save("{db}/{table}")
 
 ```
 
