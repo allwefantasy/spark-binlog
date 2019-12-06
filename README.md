@@ -1,6 +1,6 @@
-# Spark MySQL Binlog Library
+# Spark Binlog Library
 
-A library for querying MySQL Binlog with Apache Spark structure streaming, 
+A library for querying Binlog with Apache Spark structure streaming, 
 for Spark SQL , DataFrames and [MLSQL](http://www.mlsql.tech).
 
 1. [jianshu: How spark-binlog works](https://www.jianshu.com/p/e7c3e84a0ea7)
@@ -26,6 +26,7 @@ version: 0.2.2-SNAPSHOT
 ## Limitation
 
 1. Version 0.2.2-SNAPSHOT only support insert/update/delete events. The other events will ignore.
+2. Only MySQL Binlog is supported in version 0.2.2-SNAPSHOT
 
 ## Usage
 
