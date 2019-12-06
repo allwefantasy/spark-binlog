@@ -11,7 +11,7 @@ for Spark SQL , DataFrames and [MLSQL](http://www.mlsql.tech).
 This library requires Spark 2.4+ (tested).
 Some older versions of Spark may work too but they are not officially supported.
 
-## Liking 
+## Linking 
 
 You can link against this library in your program at the following coordinates:
 
@@ -25,8 +25,7 @@ version: 0.2.2-SNAPSHOT
 
 ## Limitation
 
-1. MySQL BinlogFormat should be set as "Row"
-2. Version 0.1.1 only support insert/update/delete events. The other events will ignore.
+1. Version 0.2.2-SNAPSHOT only support insert/update/delete events. The other events will ignore.
 
 ## Usage
 
@@ -41,7 +40,8 @@ format("org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource").
 option("host","127.0.0.1").
 option("port","3306").
 option("userName","xxxxx").
-option("password","xxxxx").
+option("password","xxxxx").       
+option("bingLogNamePrefix","mysql-bin").
 option("databaseNamePattern","mlsql_console").
 option("tableNamePattern","script_file").
 optioin("binlogIndex","4").
@@ -91,6 +91,13 @@ and checkpointLocation="/tmp/cpl-binlog2";
 
 
 [MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html)
+
+## RoadMap
+
+Until 0.2.2-SNAPSHOT, spark-binlog only supports binlog for MySQL.
+We hope we can support more DBs including traditional DB e.g Oracle and 
+NoSQL e.g. HBase(WAL),ES,Cassandra in future.  
+
 
 ## How to get the initial offset 
 
