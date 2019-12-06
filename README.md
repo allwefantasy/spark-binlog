@@ -105,6 +105,33 @@ NoSQL e.g. HBase(WAL),ES,Cassandra in future.
 If you are the first time to start spark-binlog, use command like following to get the offset you want:
 
 ```
+mysql> show master status;
++------------------+----------+--------------+------------------+-------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
++------------------+----------+--------------+------------------+-------------------+
+| mysql-bin.000014 | 34913156 |              |                  |                   |
++------------------+----------+--------------+------------------+-------------------+
+1 row in set (0.04 sec)
+```  
+
+In this example, we knows that:
+
+```       
+bingLogNamePrefix      binlogFileOffset   binlogFileOffset
+mysql-bin        .     000014             34913156
+```
+
+this means you should configure parameters like this: 
+
+```
+bingLogNamePrefix="mysql-bin"
+binlogFileOffset="14"
+binlogFileOffset="34913156"
+```
+
+
+Or you can use `mysqlbinlog` command.
+```
 mysqlbinlog \ 
 --start-datetime="2019-06-19 01:00:00" \ 
 --stop-datetime="2019-06-20 23:00:00" \ 
