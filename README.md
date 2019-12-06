@@ -59,7 +59,7 @@ option("duration","5").
 option("syncType","binlog").
 option("checkpointLocation","/tmp/cpl-binlog2").
 option("path","{db}/{table}").
-.outputmode(OutputMode.Append)...
+outputmode(OutputMode.Append)...
 
 ```
 
