@@ -45,8 +45,8 @@ option("password","xxxxx").
 option("bingLogNamePrefix","mysql-bin").
 option("databaseNamePattern","mlsql_console").
 option("tableNamePattern","script_file").
-optioin("binlogIndex","4").
-optioin("binlogFileOffset","4").
+option("binlogIndex","4").
+option("binlogFileOffset","4").
 load()
 
 
