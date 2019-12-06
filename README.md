@@ -57,7 +57,7 @@ option("mode","Append").
 option("idCols","id").
 option("duration","5").
 option("syncType","binlog").
-checkpointLocation("/tmp/cpl-binlog2")
+optioin("checkpointLocation","/tmp/cpl-binlog2")
 .mode(OutputMode.Append).save("{db}/{table}")
 
 ```
