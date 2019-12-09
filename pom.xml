@@ -6,7 +6,13 @@
 
     <groupId>tech.mlsql</groupId>
     <artifactId>spark-binlog_2.11</artifactId>
+    <packaging>pom</packaging>
     <version>0.2.2-SNAPSHOT</version>
+    <modules>
+        <module>mysql-binlog</module>
+        <module>hbase-wal</module>
+        <module>binlog-common</module>
+    </modules>
 
     <name>Spark MySQL Binlog DataSource</name>
     <url>https://github.com/allwefantasy/spark-binlog</url>
@@ -51,6 +57,8 @@
         <spark.bigversion>2.4</spark.bigversion>
         <mlsql.version>1.2.0</mlsql.version>
 
+        <hbase.version>2.0.4</hbase.version>
+
         <guava.version>16.0</guava.version>
         <httpclient.version>4.5.3</httpclient.version>
 
@@ -59,6 +67,7 @@
         <hadoop-client-version>2.6.5</hadoop-client-version>
         <common-utils.version>0.2.0</common-utils.version>
         <binlog.version>0.18.1</binlog.version>
+        <hbase.version>2.0.4</hbase.version>
     </properties>
 
     <dependencies>
@@ -67,6 +76,8 @@
             <artifactId>common-utils_${scala.binary.version}</artifactId>
             <version>${common-utils.version}</version>
         </dependency>
+
+
         <dependency>
             <groupId>org.scalactic</groupId>
             <artifactId>scalactic_${scala.binary.version}</artifactId>
@@ -120,12 +131,7 @@
             <scope>${scope}</scope>
         </dependency>
 
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.16</version>
-            <scope>${scope}</scope>
-        </dependency>
+        
 
         <dependency>
             <groupId>org.apache.spark</groupId>
@@ -182,6 +188,7 @@
     </dependencies>
 
     <profiles>
+      
         <profile>
             <id>disable-java8-doclint</id>
             <activation>
