@@ -11,6 +11,10 @@ case class NooopsResponse() extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(nooopsResponse = this)
 }
 
+case class ShutDownServer() extends Request[SocketRequest] {
+  override def wrap: SocketRequest = SocketRequest(shutDownServer = this)
+}
+
 case class SocketResponse(nooopsResponse: NooopsResponse = null) {
   def unwrap: Response[_] = {
     if (nooopsResponse != null) nooopsResponse
@@ -19,12 +23,15 @@ case class SocketResponse(nooopsResponse: NooopsResponse = null) {
 }
 
 case class SocketRequest(
-                          nooopsRequest: NooopsRequest = null
+                          nooopsRequest: NooopsRequest = null,
+                          shutDownServer: ShutDownServer = null
 
                         ) {
   def unwrap: Request[_] = {
     if (nooopsRequest != null) {
       nooopsRequest
+    } else if (shutDownServer != null) {
+      shutDownServer
     } else {
       null
     }
