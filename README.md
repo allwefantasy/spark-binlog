@@ -34,32 +34,38 @@ version: 0.2.2-SNAPSHOT
 DataFrame:
 
 ```scala
-val spark: SparkSession = ???
+val spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("Binlog2DeltaTest")
+      .getOrCreate()
 
 val df = spark.readStream.
-format("org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource").
-option("host","127.0.0.1").
-option("port","3306").
-option("userName","xxxxx").
-option("password","xxxxx").       
-option("bingLogNamePrefix","mysql-bin").
-option("databaseNamePattern","mlsql_console").
-option("tableNamePattern","script_file").
-option("binlogIndex","4").
-option("binlogFileOffset","4").
-load()
+  format("org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource").
+  option("host","127.0.0.1").
+  option("port","3306").
+  option("userName","root").
+  option("password","123456").
+  option("databaseNamePattern","test").
+  option("tableNamePattern","mlsql_binlog").
+  option("bingLogNamePrefix","mysql-bin").
+  option("binlogIndex","10").
+  option("binlogFileOffset","90840").
+  load()
 
+val query = df.writeStream.
+  format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
+  option("__path__","/tmp/datahouse/{db}/{table}").
+  option("path","{db}/{table}").
+  option("mode","Append").
+  option("idCols","id").
+  option("duration","3").
+  option("syncType","binlog").
+  option("checkpointLocation", "/tmp/cpl-binlog2").
+  outputMode("append")
+  .trigger(Trigger.ProcessingTime("3 seconds"))
+  .start()
 
-df.writeStream.
-format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").  
-option("__path__","/tmp/sync/tables").
-option("mode","Append").
-option("idCols","id").
-option("duration","5").
-option("syncType","binlog").
-option("checkpointLocation","/tmp/cpl-binlog2").
-option("path","{db}/{table}").
-outputmode(OutputMode.Append)...
+query.awaitTermination()
 
 ```
 
@@ -92,7 +98,54 @@ and checkpointLocation="/tmp/cpl-binlog2";
 ```
 
 
-[MLSQL Example](http://docs.mlsql.tech/en/guide/stream/binlog.html)
+Before you run the streaming application, make sure you have fully sync the table 
+
+MLSQL Code:
+
+```sql
+connect jdbc where
+ url="jdbc:mysql://127.0.0.1:3306/mlsql_console?characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&tinyInt1isBit=false"
+ and driver="com.mysql.jdbc.Driver"
+ and user="xxxxx"
+ and password="xxxx"
+ as db_cool;
+ 
+load jdbc.`db_cool.script_file`  as script_file;
+
+run script_file as TableRepartition.`` where partitionNum="2" and partitionType="range" and partitionCols="id"
+as rep_script_file;
+
+save overwrite rep_script_file as delta.`mysql_mlsql_console.script_file` ;
+
+load delta.`mysql_mlsql_console.script_file`  as output;
+```
+
+DataFrame Code:
+
+```scala
+import org.apache.spark.sql.SparkSession
+val spark = SparkSession.builder()
+  .master("local[*]")
+  .appName("wow")
+  .getOrCreate()
+
+val mysqlConf = Map(
+  "url" -> "jdbc:mysql://localhost:3306/mlsql_console?characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&tinyInt1isBit=false",
+  "driver" -> "com.mysql.jdbc.Driver",
+  "user" -> "xxxxx",
+  "password" -> "xxxx",
+  "dbtable" -> "script_file"
+)
+
+import org.apache.spark.sql.functions.col
+var df = spark.read.format("jdbc").options(mysqlConf).load()
+df = df.repartitionByRange(2, col("id") )
+df.write
+  .format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
+  mode("overwrite").
+  save("/tmp/datahouse/mlsql_console/script_file")
+spark.close()
+```
 
 ## RoadMap
 
