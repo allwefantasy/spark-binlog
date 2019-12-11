@@ -5,14 +5,15 @@ import java.net.Socket
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.streaming.Source
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.mlsql.sources.hbase.wal.{HBaseWALSocketServerInExecutor, ShutDownServer, SocketClient}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.util.{SerializableConfiguration, TaskCompletionListener, TaskFailureListener}
 import org.apache.spark.{SparkEnv, TaskContext}
-import tech.mlsql.common.utils.distribute.socket.server.{ReportHostAndPort, TempSocketServerInDriver}
+import tech.mlsql.common.utils.distribute.socket.server.{ReportHostAndPort, ReportSingleAction, SocketServerSerDer, TempSocketServerInDriver}
 import tech.mlsql.common.utils.network.NetUtils
 
 /**
@@ -43,7 +44,12 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
       dropRight(2).mkString("/")
 
     val hostAndPortContext = new AtomicReference[ReportHostAndPort]()
+
     val tempServer = new TempSocketServerInDriver(hostAndPortContext) {
+      def close = {
+        _server.close()
+      }
+
       override def host: String = {
         if (SparkEnv.get == null) {
           //When SparkEnv.get is null, the program may run in a test
@@ -92,10 +98,56 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
           }
         })
 
+        def sendHBaseWALServerInfoBackToDriver = {
+          val client = new SocketServerSerDer[ReportSingleAction, ReportSingleAction]() {}
+          val socket = new Socket(tempSocketServerHost, tempSocketServerPort)
+          val dout = new DataOutputStream(socket.getOutputStream)
+          client.sendRequest(dout, ReportHostAndPort(walServer._host, walServer._port))
+          dout.close()
+          socket.close()
+        }
 
+        sendHBaseWALServerInfoBackToDriver
+        while (!TaskContext.get().isInterrupted() && !walServer.isClosed) {
+          Thread.sleep(1000)
+        }
+        ()
       }
     }
+
+    new Thread("launch-hbase-wal-socket-server-in-spark-job") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        launchHBaseWALServer
+      }
+    }.start()
+
+    var count = 60
+
+    while (hostAndPortContext.get() == null) {
+      Thread.sleep(1000)
+      count -= 1
+    }
+    if (hostAndPortContext.get() == null) {
+      throw new RuntimeException("start HBaseWALSocketServerInExecutor fail")
+    }
+    tempServer.close
+    MLSQLHBaseWAlSource(sqlContext.sparkSession, metadataPath, parameters ++ Map("binlogServerId" -> binlogServerId))
   }
 
   override def shortName(): String = "hbaseWAL"
+}
+
+case class MLSQLHBaseWAlSource(spark: SparkSession,
+                               metadataPath: String,
+                               parameters: Map[String, String]
+                              ) extends Source with Logging {
+  override def schema: StructType = ???
+
+  override def getOffset: Option[Offset] = ???
+
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = ???
+
+  override def stop(): Unit = ???
 }
