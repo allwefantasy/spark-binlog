@@ -30,8 +30,35 @@ version: 0.2.2-SNAPSHOT
 
 ## Usage
 
+The example should work with [delta-plus](https://github.com/allwefantasy/delta-plus)
 
-DataFrame:
+MLSQL Code:
+
+```sql
+set streamName="binlog";
+
+load binlog.`` where 
+host="127.0.0.1"
+and port="3306"
+and userName="xxxxx"
+and password="xxxxx"
+and bingLogNamePrefix="mysql-bin"
+and binlogIndex="4"
+and binlogFileOffset="4"
+and databaseNamePattern="mlsql_console"
+and tableNamePattern="script_file"
+as table1;
+
+save append table1  
+as rate.`mysql_{db}.{table}` 
+options mode="Append"
+and idCols="id"
+and duration="5"
+and syncType="binlog"
+and checkpointLocation="/tmp/cpl-binlog2";
+```
+
+DataFrame Code:
 
 ```scala
 val spark = SparkSession.builder()
@@ -67,34 +94,6 @@ val query = df.writeStream.
 
 query.awaitTermination()
 
-```
-
-
-
-MLSQL:
-
-```sql
-set streamName="binlog";
-
-load binlog.`` where 
-host="127.0.0.1"
-and port="3306"
-and userName="xxxxx"
-and password="xxxxx"
-and bingLogNamePrefix="mysql-bin"
-and binlogIndex="4"
-and binlogFileOffset="4"
-and databaseNamePattern="mlsql_console"
-and tableNamePattern="script_file"
-as table1;
-
-save append table1  
-as rate.`mysql_{db}.{table}` 
-options mode="Append"
-and idCols="id"
-and duration="5"
-and syncType="binlog"
-and checkpointLocation="/tmp/cpl-binlog2";
 ```
 
 
