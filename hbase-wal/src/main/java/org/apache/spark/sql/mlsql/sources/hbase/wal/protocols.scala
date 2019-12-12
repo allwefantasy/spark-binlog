@@ -11,11 +11,11 @@ case class NooopsResponse() extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(nooopsResponse = this)
 }
 
-case class RequestOffset() extends Request[SocketRequest] {
+case class RequestOffset(names: Seq[String]) extends Request[SocketRequest] {
   override def wrap: SocketRequest = SocketRequest(requestOffset = this)
 }
 
-case class OffsetResponse(offsets: String) extends Response[SocketResponse] {
+case class OffsetResponse(offsets: Map[String, Long]) extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(offsetResponse = this)
 }
 
@@ -23,7 +23,7 @@ case class DataResponse(data: List[String]) extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(dataResponse = this)
 }
 
-case class RequestData(startOffset: Long, endOffset: Long) extends Request[SocketRequest] {
+case class RequestData(name:String,startOffset: Long, endOffset: Long) extends Request[SocketRequest] {
   override def wrap: SocketRequest = SocketRequest(requestData = this)
 }
 

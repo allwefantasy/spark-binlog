@@ -1,103 +1,124 @@
 package org.apache.spark.sql.mlsql.sources.hbase.wal
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.net.Socket
 import java.util
-import java.util.UUID
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.wal.WAL
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
-import org.apache.spark.streaming.{BinlogWriteAheadLog, RawEvent}
-import tech.mlsql.common.utils.distribute.socket.server.SocketServerInExecutor
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset}
+import org.apache.spark.sql.mlsql.sources.hbase.wal.io.{DeleteWriter, PutWriter}
+import org.apache.spark.streaming.RawEvent
+import tech.mlsql.binlog.common.OriginalSourceServerInExecutor
+import tech.mlsql.common.utils.distribute.socket.server.SocketIteratorMark
 import tech.mlsql.common.utils.network.NetUtils
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
 /**
  * 9/12/2019 WilliamZhu(allwefantasy@gmail.com)
  */
 class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String,
-                                        hadoopConf: Configuration, isWriteAheadStorage: Boolean = true)
-  extends SocketServerInExecutor[T](taskContextRef, "hbase-wal-socket-server-in-executor") with Logging {
+                                        hadoopConf: Configuration, isWriteAheadStorage: Boolean = true) extends OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String,
+  hadoopConf: Configuration, isWriteAheadStorage: Boolean) {
 
-  @volatile private var markClose: AtomicBoolean = new AtomicBoolean(false)
-  private val connections = new ArrayBuffer[Socket]()
-  val client = new SocketClient()
-
-  var walLogPath: String = ""
-  var startTime: Long = 0
+  private val client = new SocketClient()
+  private var originSourceClient: HBaseWALClient = null
+  private var walLogPath: String = ""
+  private var startTime: Long = 0L
 
 
+  def setWalLogPath(walLogPath: String) = this.walLogPath = walLogPath
 
-  private val aheadLogBuffer = new java.util.concurrent.ConcurrentLinkedDeque[RawEvent]()
+  def setStartTime(startTime: Long) = this.startTime = startTime
 
-
-  private val writeAheadLog = {
-    val sparkEnv = SparkEnv.get
-    val tmp = new BinlogWriteAheadLog(UUID.randomUUID().toString, sparkEnv.serializerManager, sparkEnv.conf, hadoopConf, checkpointDir)
-    tmp.cleanupOldBlocks(System.currentTimeMillis(), true)
-    tmp
+  override def connect: Unit = {
+    assert(walLogPath != "", "walLogPath is required")
+    assert(startTime != 0, "startTime is required")
+    connectWAL(walLogPath, startTime)
   }
 
+  override def pause: Unit = {
+    throw new RuntimeException("not support")
+  }
 
-  override def close() = {
-    // make sure we only close once
-    if (markClose.compareAndSet(false, true)) {
-      logInfo(s"Shutdown ${host}. This may caused by the task is killed.")
+  override def resume: Unit = {
+    throw new RuntimeException("not support")
+  }
+
+  override def closeOriginalSource: Unit = {
+    if (originSourceClient != null) {
+      originSourceClient.disConnect
     }
   }
 
-  def isClosed = markClose.get()
 
-  override def handleConnection(socket: Socket): Unit = {
-    connections += socket
-    socket.setKeepAlive(true)
-    val dIn = new DataInputStream(socket.getInputStream)
-    val dOut = new DataOutputStream(socket.getOutputStream)
+  override def flushAheadLog: Unit = {
+    super.flushAheadLog
+  }
 
-    while (true) {
-      client.readRequest(dIn) match {
-        case _: NooopsRequest =>
-          client.sendResponse(dOut, NooopsResponse())
-        case requestOffset: RequestOffset =>
-        case requestData: RequestData =>
+  private def toOffset(rawBinlogEvent: RawEvent) = {
+    rawBinlogEvent.asInstanceOf[RawHBaseWALEvent].offset.sequenceId
+  }
 
-      }
+  val putWriter = new PutWriter()
+  val delWriter = new DeleteWriter()
+
+  def convertRawBinlogEventRecord(event: RawHBaseWALEvent) = {
+    val writer = if (event.put != null) putWriter else delWriter
+    val jsonList = try {
+      writer.writeEvent(event)
+    } catch {
+      case e: Exception =>
+        logError("", e)
+        new util.ArrayList[String]()
+    }
+    jsonList
+  }
+
+  override def process(dIn: DataInputStream, dOut: DataOutputStream): Unit = {
+    client.readRequest(dIn) match {
+      case _: NooopsRequest =>
+        client.sendResponse(dOut, NooopsResponse())
+      case _: ShutDownServer => close()
+      case RequestOffset(names) =>
+        client.sendResponse(dOut, OffsetResponse(committedOffsets.asScala.
+          filter(f => names.contains(f._1)).
+          map(f => (f._1, LongOffset.convert(f._2).get.offset)).toMap))
+      case RequestData(name, startOffset, endOffset) =>
+        try {
+          if (isWriteAheadStorage) {
+            client.sendMarkRequest(dOut, SocketIteratorMark.HEAD)
+            writeAheadLogMap.get(name).read((records) => {
+              records.foreach { record =>
+                if (toOffset(record) >= startOffset && toOffset(record) < endOffset) {
+                  client.sendResponse(dOut,
+                    DataResponse(convertRawBinlogEventRecord(record.asInstanceOf[RawHBaseWALEvent]).asScala.toList))
+                }
+              }
+            })
+            client.sendMarkRequest(dOut, SocketIteratorMark.END)
+          } else {
+            client.sendMarkRequest(dOut, SocketIteratorMark.HEAD)
+            var item = queue.poll()
+            while (item != null && toOffset(item) >= startOffset && toOffset(item) < endOffset) {
+              client.sendResponse(dOut, DataResponse(convertRawBinlogEventRecord(item.asInstanceOf[RawHBaseWALEvent]).asScala.toList))
+              item = queue.poll()
+              currentQueueSize.decrementAndGet()
+            }
+            client.sendMarkRequest(dOut, SocketIteratorMark.END)
+          }
+
+        } catch {
+          case e: Exception =>
+            logError("", e)
+        }
+
+
     }
   }
 
-  override def host: String = {
-    if (SparkEnv.get == null) {
-      //When SparkEnv.get is null, the program may run in a test
-      //So return local address would be ok.
-      "127.0.0.1"
-    } else {
-      val hostName = tech.mlsql.common.utils.network.SparkExecutorInfo.getInstance.hostname
-      if (hostName == null) NetUtils.getHost else hostName
-    }
-  }
-
-  def format_throwable(e: Throwable, skipPrefix: Boolean = false) = {
-    (e.toString.split("\n") ++ e.getStackTrace.map(f => f.toString)).map(f => f).toSeq.mkString("\n")
-  }
-
-
-  def format_full_exception(buffer: ArrayBuffer[String], e: Exception, skipPrefix: Boolean = true) = {
-    var cause = e.asInstanceOf[Throwable]
-    buffer += format_throwable(cause, skipPrefix)
-    while (cause.getCause != null) {
-      cause = cause.getCause
-      buffer += "caused by：\n" + format_throwable(cause, skipPrefix)
-    }
-
-  }
-
-  private var connectThread: Thread = null
-
-  def connectWAL() = {
+  def connectWAL(walLogPath: String, startTime: Long) = {
     connectThread = new Thread(s"connect hbase wal in ${walLogPath} ") {
       setDaemon(true)
 
@@ -105,8 +126,8 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
         try {
           val hbaseWALclient = new HBaseWALClient(walLogPath, startTime, hadoopConf)
           hbaseWALclient.register(new HBaseWALEventListener {
-            override def onEvent(event: WAL.Entry): Unit = {
-
+            override def onEvent(event: RawHBaseWALEvent): Unit = {
+              addRecord(event)
             }
           })
           hbaseWALclient.connect()
@@ -120,6 +141,21 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
     }
     connectThread.start()
 
+  }
+
+  override def host: String = {
+    if (SparkEnv.get == null) {
+      //When SparkEnv.get is null, the program may run in a test
+      //So return local address would be ok.
+      "127.0.0.1"
+    } else {
+      val hostName = tech.mlsql.common.utils.network.SparkExecutorInfo.getInstance.hostname
+      if (hostName == null) NetUtils.getHost else hostName
+    }
+  }
+
+  override def less(a: Offset, b: Offset): Boolean = {
+    LongOffset.convert(a).get.offset < LongOffset.convert(b).get.offset
   }
 }
 
