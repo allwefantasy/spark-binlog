@@ -17,7 +17,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, TaskCompletionListener, TaskFailureListener}
 import org.apache.spark.{SparkEnv, TaskContext}
-import tech.mlsql.binlog.common.CommonSourceOffset
+import tech.mlsql.binlog.common.{BinlogConsumer, CommonOffsetRange, CommonSourceOffset, ConsumerCache}
 import tech.mlsql.common.utils.distribute.socket.server.{ReportHostAndPort, ReportSingleAction, SocketServerSerDer, TempSocketServerInDriver}
 import tech.mlsql.common.utils.network.NetUtils
 
@@ -31,11 +31,8 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
                             schema: Option[StructType],
                             providerName: String,
                             parameters: Map[String, String]): (String, StructType) = {
-    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), {
-      StructType(Seq(StructField("rawkey", StringType)))
-      StructType(Seq(StructField("value", StringType)))
-    })
+    require(schema.isEmpty, "HBase WAL source has a fixed schema and cannot be set with a custom one")
+    (shortName(), StructType(Seq(StructField("value", StringType))))
   }
 
   override def createSource(sqlContext: SQLContext, metadataPath: String, schema: Option[StructType], providerName: String, parameters: Map[String, String]): Source = {
@@ -245,7 +242,7 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
 
     initialPartitionOffsets
 
-    val untilPartitionOffsets = LongOffset.convert(end)
+    val untilPartitionOffsets = end.asInstanceOf[CommonSourceOffset]
 
     // On recovery, getBatch will get called before getOffset
     if (currentPartitionOffsets.isEmpty) {
@@ -261,23 +258,43 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
     // In normal case, we will recover the start from checkpoint offset directory
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
-        LongOffset.convert(prevBatchEndOffset)
+        prevBatchEndOffset.asInstanceOf[CommonSourceOffset]
       case None =>
-        Some(initialPartitionOffsets)
+        initialPartitionOffsets
     }
 
-    val executorBinlogServerCopy = executorBinlogServer.copy()
+    val executorBinlogServerCopy = hostAndPort.copy()
 
-    // Here we only use one partition to fetch data from binlog server.
-    // The socket may be broken because we fetch all data in memory.
-    // todo: optimize the way to fetch data
-    val rdd = spark.sparkContext.parallelize(Seq("fetch-bing-log"), 1).mapPartitions { iter =>
-      val consumer = ExecutorBinlogServerConsumerCache.acquire(executorBinlogServerCopy)
-      consumer.fetchData(fromPartitionOffsets.get, untilPartitionOffsets.get)
+    val offsetRanges = fromPartitionOffsets.partitionToOffsets.map(f => f._1).map { tp =>
+      val fromOffset = fromPartitionOffsets.partitionToOffsets.get(tp).getOrElse {
+        fromPartitionOffsets.partitionToOffsets.getOrElse(tp, {
+          // This should not happen since newPartitionOffsets contains all partitions not in
+          // fromPartitionOffsets
+          throw new IllegalStateException(s"$tp doesn't have a from offset")
+        })
+      }
+      val untilOffset = untilPartitionOffsets.partitionToOffsets(tp)
+
+      CommonOffsetRange(tp, fromOffset, untilOffset)
+    }.filter { range =>
+      if (range.untilOffset < range.fromOffset) {
+        throw new RuntimeException(s"Partition ${range.commonPartition}'s offset was changed from " +
+          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
+        false
+      } else {
+        true
+      }
+    }.toArray
+
+    val rdd = spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
+      val consumer = ConsumerCache.acquire(executorBinlogServerCopy, () => {
+        new ExecutorInternalBinlogConsumer(executorBinlogServerCopy)
+      })
+      consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
     }.map { cr =>
       InternalRow(UTF8String.fromString(cr))
     }
-    spark.sqlContext.internalCreateDataFrame(rdd.setName("mysql-bin-log"), schema, isStreaming = true)
+    spark.sqlContext.internalCreateDataFrame(rdd.setName("incremental-data"), schema, isStreaming = true)
   }
 
   override def stop(): Unit = {
@@ -296,31 +313,41 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
   }
 }
 
-case class ExecutorInternalBinlogConsumer(hostAndPort: ReportHostAndPort) extends BinLogSocketServerSerDer {
+case class ExecutorInternalBinlogConsumer(hostAndPort: ReportHostAndPort) extends BinlogConsumer {
+
   val socket = new Socket(hostAndPort.host, hostAndPort.port)
   val dIn = new DataInputStream(socket.getInputStream)
   val dOut = new DataOutputStream(socket.getOutputStream)
   val client = new SocketClient()
-  @volatile var inUse = true
-  @volatile var markedForClose = false
 
-  def fetchData(start: LongOffset, end: LongOffset) = {
+  @volatile var _inUse = true
+  @volatile var _markedForClose = false
+
+
+  override def markInUse: Unit = _inUse = true
+
+  override def markInIdle: Unit = _inUse = false
+
+  override def markedForClose: Unit = _markedForClose = true
+
+  override def fetchData(partitionId: String, start: Long, end: Long): Any = {
     try {
       client.sendRequest(dOut, RequestData(
-        start.offset,
-        end.offset))
-      // todo: optimize the way to fetch data
-      //      val response = readResponse(dIn)
+        start,
+        end))
       val response = client.readIterator(dIn)
-      //      response.asInstanceOf[DataResponse].data
-      response.flatMap(f=>f.asInstanceOf[DataResponse].data)
+      response.flatMap(f => f.asInstanceOf[DataResponse].data)
     } finally {
-      ExecutorBinlogServerConsumerCache.release(this)
+      ConsumerCache.release(this)
     }
   }
 
-  def close = {
+  override def close = {
     socket.close()
   }
+
+  override def targetHostAndPort: ReportHostAndPort = hostAndPort
+
+  override def inUse: Boolean = _inUse
 }
 

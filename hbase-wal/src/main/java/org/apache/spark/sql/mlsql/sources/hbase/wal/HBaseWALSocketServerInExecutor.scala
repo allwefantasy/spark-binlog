@@ -2,11 +2,15 @@ package org.apache.spark.sql.mlsql.sources.hbase.wal
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.net.Socket
+import java.util
+import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.wal.WAL
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.streaming.{BinlogWriteAheadLog, RawEvent}
 import tech.mlsql.common.utils.distribute.socket.server.SocketServerInExecutor
 import tech.mlsql.common.utils.network.NetUtils
 
@@ -22,6 +26,22 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
   @volatile private var markClose: AtomicBoolean = new AtomicBoolean(false)
   private val connections = new ArrayBuffer[Socket]()
   val client = new SocketClient()
+
+  var walLogPath: String = ""
+  var startTime: Long = 0
+
+
+
+  private val aheadLogBuffer = new java.util.concurrent.ConcurrentLinkedDeque[RawEvent]()
+
+
+  private val writeAheadLog = {
+    val sparkEnv = SparkEnv.get
+    val tmp = new BinlogWriteAheadLog(UUID.randomUUID().toString, sparkEnv.serializerManager, sparkEnv.conf, hadoopConf, checkpointDir)
+    tmp.cleanupOldBlocks(System.currentTimeMillis(), true)
+    tmp
+  }
+
 
   override def close() = {
     // make sure we only close once
@@ -42,6 +62,9 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
       client.readRequest(dIn) match {
         case _: NooopsRequest =>
           client.sendResponse(dOut, NooopsResponse())
+        case requestOffset: RequestOffset =>
+        case requestData: RequestData =>
+
       }
     }
   }
@@ -69,6 +92,33 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
       cause = cause.getCause
       buffer += "caused by：\n" + format_throwable(cause, skipPrefix)
     }
+
+  }
+
+  private var connectThread: Thread = null
+
+  def connectWAL() = {
+    connectThread = new Thread(s"connect hbase wal in ${walLogPath} ") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          val hbaseWALclient = new HBaseWALClient(walLogPath, startTime, hadoopConf)
+          hbaseWALclient.register(new HBaseWALEventListener {
+            override def onEvent(event: WAL.Entry): Unit = {
+
+            }
+          })
+          hbaseWALclient.connect()
+
+        } catch {
+          case e: Exception =>
+            throw e
+        }
+
+      }
+    }
+    connectThread.start()
 
   }
 }

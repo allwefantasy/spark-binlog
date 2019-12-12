@@ -78,3 +78,5 @@ object CommonSourceOffset {
   def apply(offset: SerializedOffset): CommonSourceOffset =
     CommonSourceOffset(partitionOffsets(offset.json))
 }
+
+case class CommonOffsetRange(commonPartition: CommonPartition, fromOffset: Long, untilOffset: Long)
