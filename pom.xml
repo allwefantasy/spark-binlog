@@ -65,7 +65,7 @@
         <serviceframework.version>2.0.0</serviceframework.version>
         <scope>provided</scope>
         <hadoop-client-version>2.6.5</hadoop-client-version>
-        <common-utils.version>0.2.0</common-utils.version>
+        <common-utils.version>0.2.1</common-utils.version>
         <binlog.version>0.18.1</binlog.version>
         <hbase.version>2.0.4</hbase.version>
     </properties>

@@ -25,13 +25,14 @@ public class PutWriter extends AbstractEventWriter {
             jsonGenerator.writeArrayFieldStart("rows");
             jsonGenerator.writeStartObject();
             Put put = event.put();
-            Map.Entry<byte[], List<Cell>> entry = put.getFamilyCellMap().firstEntry();
-            Cell cell = entry.getValue().get(0);
-            String f = new String(cell.getFamilyArray());
-            String col = new String(cell.getQualifierArray());
-
-            jsonGenerator.writeObjectField("rowkey", new String(entry.getKey()));
-            jsonGenerator.writeObjectField(f + ":" + col, Bytes.toString(entry.getValue().get(0).getRowArray()));
+            jsonGenerator.writeObjectField("rowkey", Bytes.toString(put.getRow()));
+            for (Map.Entry<byte[], List<Cell>> entry : put.getFamilyCellMap().entrySet()) {
+                for (Cell cell : entry.getValue()) {
+                    String f = Bytes.toString(cell.getFamilyArray());
+                    String col = Bytes.toString(cell.getQualifierArray());
+                    jsonGenerator.writeObjectField(f + ":" + col, Bytes.toString(cell.getValueArray()));
+                }
+            }
 
             jsonGenerator.writeEndObject();
             jsonGenerator.writeEndArray();

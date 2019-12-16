@@ -24,9 +24,10 @@ class Test extends FunSuite {
 
     val query = df.writeStream.
       format("console").
-      option("path", "/tmp/jack").
       option("mode", "Append").
-      option("checkpointLocation", "/tmp/cpl-binlog23").
+      option("truncate","false").
+      option("numRows","100000").
+      option("checkpointLocation", "/tmp/cpl-binlog25").
       outputMode("append")
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .start()

@@ -149,4 +149,10 @@ case class RawHBaseWALEvent(put: Put, del: Delete, db: String, table: String, of
   override def pos(): Offset = LongOffset(offset.sequenceId)
 }
 
+case class RawHBaseWALEventsSerialization(_key: String, _pos: Offset, item: Seq[String]) extends RawEvent {
+  override def key(): String = _key
+
+  override def pos(): Offset = _pos
+}
+
 case class RawHBaseEventOffset(regionName: String, sequenceId: Long)

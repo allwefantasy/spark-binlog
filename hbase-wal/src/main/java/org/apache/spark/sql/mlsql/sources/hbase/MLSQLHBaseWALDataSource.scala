@@ -69,6 +69,8 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
 
     val walLogPath = parameters("walLogPath")
     val startTime = parameters.getOrElse("startTime", "0").toLong
+    val aheadLogBufferFlushSize = parameters.getOrElse("aheadLogBufferFlushSize", "-1").toLong
+    val aheadLogSaveTime = parameters.getOrElse("aheadLogSaveTime", "-1").toLong
 
     def launchHBaseWALServer = {
       spark.sparkContext.setJobGroup(binlogServerId, s"hbase WAL server", true)
@@ -79,6 +81,14 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
         val walServer = new HBaseWALSocketServerInExecutor(taskContextRef, checkPointDir, confBr.value.value, true)
         walServer.setWalLogPath(walLogPath)
         walServer.setStartTime(startTime)
+
+        if (aheadLogBufferFlushSize != -1) {
+          walServer.setAheadLogBufferFlushSize(aheadLogBufferFlushSize)
+        }
+
+        if (aheadLogSaveTime != -1) {
+          walServer.setAheadLogBufferFlushSize(aheadLogSaveTime)
+        }
 
         def sendStopServerRequest = {
           val client = new SocketClient()
@@ -224,7 +234,7 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
     client.sendRequest(dOut, RequestOffset())
     val response = client.readResponse(dIn).asInstanceOf[OffsetResponse]
     val offsets = response.offsets.map { f =>
-      (new CommonPartition(f._1, -1), f._2)
+      (new CommonPartition(f._1, f._1.hashCode), f._2.toLong)
     }.toMap
     CommonSourceOffset(offsets)
   }
@@ -271,7 +281,8 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
         initialPartitionOffsets
     }
 
-    val executorBinlogServerCopy = hostAndPort.copy()
+    val walServerHost = hostAndPort.host
+    val walServerPort = hostAndPort.port
 
     val offsetRanges = fromPartitionOffsets.partitionToOffsets.map(f => f._1).map { tp =>
       val fromOffset = fromPartitionOffsets.partitionToOffsets.get(tp).getOrElse {
@@ -300,8 +311,8 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
 
     } else {
       spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
-        val consumer = ConsumerCache.acquire(executorBinlogServerCopy, () => {
-          new ExecutorInternalBinlogConsumer(executorBinlogServerCopy)
+        val consumer = ConsumerCache.acquire(ReportHostAndPort(walServerHost,walServerPort), () => {
+          new ExecutorInternalBinlogConsumer(ReportHostAndPort(walServerHost,walServerPort))
         })
         consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
       }.map { cr =>

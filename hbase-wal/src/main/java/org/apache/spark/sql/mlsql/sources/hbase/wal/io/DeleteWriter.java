@@ -2,6 +2,7 @@ package org.apache.spark.sql.mlsql.sources.hbase.wal.io;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.spark.sql.mlsql.sources.hbase.wal.RawHBaseWALEvent;
 
 import java.io.IOException;
@@ -24,13 +25,15 @@ public class DeleteWriter extends AbstractEventWriter {
             jsonGenerator.writeArrayFieldStart("rows");
             jsonGenerator.writeStartObject();
             Delete delete = event.del();
-            Map.Entry<byte[], List<Cell>> entry = delete.getFamilyCellMap().firstEntry();
-            Cell cell = entry.getValue().get(0);
-            String f = new String(cell.getFamilyArray());
-            String col = new String(cell.getQualifierArray());
 
-            jsonGenerator.writeObjectField("rowkey", new String(entry.getKey()));
-            jsonGenerator.writeObjectField(f + ":" + col, "");
+            jsonGenerator.writeObjectField("rowkey", Bytes.toString(delete.getRow()));
+            for (Map.Entry<byte[], List<Cell>> entry : delete.getFamilyCellMap().entrySet()) {
+                for (Cell cell : entry.getValue()) {
+                    String f = Bytes.toString(cell.getFamilyArray());
+                    String col = Bytes.toString(cell.getQualifierArray());
+                    jsonGenerator.writeObjectField(f + ":" + col, Bytes.toString(cell.getValueArray()));
+                }
+            }
 
             jsonGenerator.writeEndObject();
             jsonGenerator.writeEndArray();

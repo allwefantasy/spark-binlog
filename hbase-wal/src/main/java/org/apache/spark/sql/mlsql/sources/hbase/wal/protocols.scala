@@ -1,5 +1,6 @@
 package org.apache.spark.sql.mlsql.sources.hbase.wal
 
+import org.apache.htrace.fasterxml.jackson.databind.annotation.JsonDeserialize
 import tech.mlsql.common.utils.distribute.socket.server.{Request, Response, SocketServerSerDer}
 
 
@@ -15,7 +16,7 @@ case class RequestOffset() extends Request[SocketRequest] {
   override def wrap: SocketRequest = SocketRequest(requestOffset = this)
 }
 
-case class OffsetResponse(offsets: Map[String, Long]) extends Response[SocketResponse] {
+case class OffsetResponse(@JsonDeserialize(contentAs = classOf[java.lang.Long]) offsets: Map[String, String]) extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(offsetResponse = this)
 }
 
@@ -23,7 +24,7 @@ case class DataResponse(data: List[String]) extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(dataResponse = this)
 }
 
-case class RequestData(name:String,startOffset: Long, endOffset: Long) extends Request[SocketRequest] {
+case class RequestData(name: String, startOffset: Long, endOffset: Long) extends Request[SocketRequest] {
   override def wrap: SocketRequest = SocketRequest(requestData = this)
 }
 

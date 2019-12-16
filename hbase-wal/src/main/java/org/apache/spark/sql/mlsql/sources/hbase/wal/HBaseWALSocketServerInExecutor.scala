@@ -5,7 +5,6 @@ import java.util
 import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.util.Bytes
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset}
 import org.apache.spark.sql.mlsql.sources.hbase.wal.io.{DeleteWriter, PutWriter}
@@ -59,7 +58,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
   }
 
   private def toOffset(rawBinlogEvent: RawEvent) = {
-    rawBinlogEvent.asInstanceOf[RawHBaseWALEvent].offset.sequenceId
+    rawBinlogEvent.asInstanceOf[RawHBaseWALEventsSerialization].pos().asInstanceOf[LongOffset].offset
   }
 
   val putWriter = new PutWriter()
@@ -83,8 +82,12 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
         client.sendResponse(dOut, NooopsResponse())
       case _: ShutDownServer => close()
       case _: RequestOffset =>
-        client.sendResponse(dOut, OffsetResponse(committedOffsets.asScala.
-          map(f => (f._1, LongOffset.convert(f._2).get.offset)).toMap))
+        synchronized {
+          flushAheadLog
+        }
+        val offsets = committedOffsets.asScala.
+          map(f => (f._1, LongOffset.convert(f._2).get.offset.toString))
+        client.sendResponse(dOut, OffsetResponse(offsets.toMap))
       case RequestData(name, startOffset, endOffset) =>
         try {
           if (isWriteAheadStorage) {
@@ -93,7 +96,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
               records.foreach { record =>
                 if (toOffset(record) >= startOffset && toOffset(record) < endOffset) {
                   client.sendResponse(dOut,
-                    DataResponse(convertRawBinlogEventRecord(record.asInstanceOf[RawHBaseWALEvent]).asScala.toList))
+                    DataResponse(record.asInstanceOf[RawHBaseWALEventsSerialization].item.toList))
                 }
               }
             })
@@ -102,7 +105,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
             client.sendMarkRequest(dOut, SocketIteratorMark.HEAD)
             var item = queue.poll()
             while (item != null && toOffset(item) >= startOffset && toOffset(item) < endOffset) {
-              client.sendResponse(dOut, DataResponse(convertRawBinlogEventRecord(item.asInstanceOf[RawHBaseWALEvent]).asScala.toList))
+              client.sendResponse(dOut, DataResponse(item.asInstanceOf[RawHBaseWALEventsSerialization].item.toList))
               item = queue.poll()
               currentQueueSize.decrementAndGet()
             }
@@ -127,7 +130,8 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
           val hbaseWALclient = new HBaseWALClient(walLogPath, startTime, hadoopConf)
           hbaseWALclient.register(new HBaseWALEventListener {
             override def onEvent(event: RawHBaseWALEvent): Unit = {
-              addRecord(event)
+              val newEvt = RawHBaseWALEventsSerialization(event.key(), event.pos(), convertRawBinlogEventRecord(event).asScala.toList)
+              addRecord(newEvt)
             }
           })
           hbaseWALclient.connect()
