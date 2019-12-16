@@ -29,7 +29,7 @@ import tech.mlsql.common.utils.path.PathFun
   * If you want to use this to upsert delta table, please set MySQL binlog_row_image to full so we can get the complete
   * record after updating.
   */
-class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister {
+class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister with Logging {
 
 
   override def sourceSchema(sqlContext: SQLContext,
@@ -91,7 +91,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
         toPath
 
       val lastFile = HDFSOperator.listFiles(offsetPath)
-        .filterNot(_.getPath.getName.endsWith(".tmp.crc"))
+        .filterNot(f => f.getPath.getName.endsWith(".tmp.crc") || f.getPath.getName.endsWith(".tmp"))
         .map { fileName =>
           (fileName.getPath.getName.split("/").last.toInt, fileName.getPath)
         }
@@ -104,7 +104,9 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val offsetFromCk = try {
       Option(LongOffset(getOffsetFromCk))
     } catch {
-      case e: Exception => None
+      case e: Exception =>
+        logError(e.getMessage, e)
+        None
     }
 
     val finalStartingOffsets = if (offsetFromCk.isDefined) offsetFromCk else startingOffsets
