@@ -6,12 +6,18 @@
 
     <groupId>tech.mlsql</groupId>
     <artifactId>spark-binlog_2.11</artifactId>
-    <version>0.2.2-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <version>1.0.0-SNAPSHOT</version>
+    <modules>
+        <module>binlog-common</module>
+        <module>mysql-binlog</module>
+        <module>hbase-wal</module>
+    </modules>
 
     <name>Spark MySQL Binlog DataSource</name>
     <url>https://github.com/allwefantasy/spark-binlog</url>
     <description>
-        A library for querying MySQL Binlog with Apache Spark structure streaming,
+        A library for querying Binlog with Apache Spark structure streaming,
         for Spark SQL , DataFrames and [MLSQL](http://www.mlsql.tech).
     </description>
     <licenses>
@@ -51,14 +57,17 @@
         <spark.bigversion>2.4</spark.bigversion>
         <mlsql.version>1.2.0</mlsql.version>
 
+        <hbase.version>2.0.4</hbase.version>
+
         <guava.version>16.0</guava.version>
         <httpclient.version>4.5.3</httpclient.version>
 
         <serviceframework.version>2.0.0</serviceframework.version>
         <scope>provided</scope>
         <hadoop-client-version>2.6.5</hadoop-client-version>
-        <common-utils.version>0.2.0</common-utils.version>
+        <common-utils.version>0.2.1</common-utils.version>
         <binlog.version>0.18.1</binlog.version>
+        <hbase.version>2.0.4</hbase.version>
     </properties>
 
     <dependencies>
@@ -67,6 +76,8 @@
             <artifactId>common-utils_${scala.binary.version}</artifactId>
             <version>${common-utils.version}</version>
         </dependency>
+
+
         <dependency>
             <groupId>org.scalactic</groupId>
             <artifactId>scalactic_${scala.binary.version}</artifactId>
@@ -120,24 +131,13 @@
             <scope>${scope}</scope>
         </dependency>
 
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.16</version>
-            <scope>${scope}</scope>
-        </dependency>
+        
 
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql-kafka-0-10_${scala.binary.version}</artifactId>
             <version>${spark.version}</version>
             <scope>${scope}</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.github.shyiko</groupId>
-            <artifactId>mysql-binlog-connector-java</artifactId>
-            <version>${binlog.version}</version>
         </dependency>
 
         <dependency>
@@ -182,6 +182,7 @@
     </dependencies>
 
     <profiles>
+      
         <profile>
             <id>disable-java8-doclint</id>
             <activation>

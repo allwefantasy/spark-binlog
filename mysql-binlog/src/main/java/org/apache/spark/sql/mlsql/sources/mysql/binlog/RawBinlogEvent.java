@@ -2,10 +2,11 @@ package org.apache.spark.sql.mlsql.sources.mysql.binlog;
 
 import com.github.shyiko.mysql.binlog.event.Event;
 import com.github.shyiko.mysql.binlog.event.EventHeaderV4;
+import org.apache.spark.sql.execution.streaming.LongOffset;
+import org.apache.spark.sql.sources.v2.reader.streaming.Offset;
+import org.apache.spark.streaming.RawEvent;
 
-import java.io.Serializable;
-
-public class RawBinlogEvent implements Serializable {
+public class RawBinlogEvent implements RawEvent {
 
     private Event event;
     private String binlogFilename;
@@ -63,5 +64,15 @@ public class RawBinlogEvent implements Serializable {
 
     public String getBinlogFilename() {
         return binlogFilename;
+    }
+
+    @Override
+    public String key() {
+        return "";
+    }
+
+    @Override
+    public Offset pos() {
+        return LongOffset.apply(BinlogOffset.fromFileAndPos(binlogFilename, pos).offset());
     }
 }
