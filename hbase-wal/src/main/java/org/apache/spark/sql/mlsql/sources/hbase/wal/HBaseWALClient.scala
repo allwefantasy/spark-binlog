@@ -45,9 +45,12 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
       while (targetFilePathIter.hasNext) {
         buffer += targetFilePathIter.next().getPath
       }
-      val targetFile = buffer.filterNot(f => f.getName.endsWith(".meta")).head
-      val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
-      readers += PathAndReader(path.getPath, reader)
+      val targetFiles = buffer.filterNot(f => f.getName.endsWith(".meta")).sortBy(f=>f.getName)
+      targetFiles.foreach { targetFile =>
+        val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
+        readers += PathAndReader(path.getPath, reader)
+      }
+
     }
 
     readers.foreach { readerAndPath =>
@@ -130,7 +133,6 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
     if (del != null) {
       batchBuffer += (RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
     }
-
     collectEvt(batchBuffer.toSeq)
 
   }
