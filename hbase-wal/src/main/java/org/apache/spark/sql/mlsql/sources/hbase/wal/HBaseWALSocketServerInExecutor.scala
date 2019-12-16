@@ -129,9 +129,11 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
         try {
           val hbaseWALclient = new HBaseWALClient(walLogPath, startTime, hadoopConf)
           hbaseWALclient.register(new HBaseWALEventListener {
-            override def onEvent(event: RawHBaseWALEvent): Unit = {
-              val newEvt = RawHBaseWALEventsSerialization(event.key(), event.pos(), convertRawBinlogEventRecord(event).asScala.toList)
-              addRecord(newEvt)
+            override def onEvent(event: Seq[RawHBaseWALEvent]): Unit = {
+              if (event.size > 0) {
+                val newEvt = RawHBaseWALEventsSerialization(event.head.key(), event.head.pos(), event.map(f => convertRawBinlogEventRecord(f)).flatMap(f => f.asScala).toList)
+                addRecord(newEvt)
+              }
             }
           })
           hbaseWALclient.connect()

@@ -17,7 +17,7 @@ public abstract class AbstractEventWriter {
     protected void startJson(StringWriter outputStream, RawHBaseWALEvent event) throws IOException {
         jsonGenerator = createJsonGenerator(outputStream);
         jsonGenerator.writeStartObject();
-        String eventType = event.put() == null ? "put" : "delete";
+        String eventType = event.put() != null ? "put" : "delete";
         if (eventType == null) {
             jsonGenerator.writeNullField("type");
         } else {

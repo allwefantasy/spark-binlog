@@ -140,6 +140,7 @@ abstract class OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference
               committedOffsets.put(event.key(), event.pos())
             }
           }
+          logInfo(s"writeAheadLogMap flush: key[${key}] records[${items.size}] committedOffsets[${committedOffsets.get(key)}]")
           writeAheadLogMap.get(key).write(items)
         }
 

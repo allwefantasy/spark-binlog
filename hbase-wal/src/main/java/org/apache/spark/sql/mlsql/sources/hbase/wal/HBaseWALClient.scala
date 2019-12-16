@@ -69,6 +69,7 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
         } else {
           eventListeners.foreach { el =>
             map(entry, (evt) => {
+              //println(evt)
               el.onEvent(evt)
             })
           }
@@ -85,7 +86,7 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
 
   }
 
-  private def map(entry: WAL.Entry, collectEvt: (RawHBaseWALEvent) => Unit) = {
+  private def map(entry: WAL.Entry, collectEvt: (Seq[RawHBaseWALEvent]) => Unit) = {
     val key = entry.getKey
     val value = entry.getEdit
     val db = key.getTableName.getNameAsString
@@ -98,14 +99,17 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
     var put: Put = null
     var del: Delete = null
     var lastCell: Cell = null
+
+    val batchBuffer = ArrayBuffer[RawHBaseWALEvent]()
+
     value.getCells().asScala.filterNot(WALEdit.isMetaEditFamily(_)).foreach { cell =>
       if (lastCell == null || lastCell.getTypeByte != cell.getTypeByte || !CellUtil.matchingRows(lastCell, cell)) {
         if (put != null) {
-          collectEvt(RawHBaseWALEvent(put, null, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
+          batchBuffer += (RawHBaseWALEvent(put, null, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
 
         }
         if (del != null) {
-          collectEvt(RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
+          batchBuffer += (RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
         }
         if (CellUtil.isDelete(cell)) {
           del = new Delete(CellUtil.cloneRow(cell))
@@ -121,12 +125,13 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
       lastCell = cell
     }
     if (put != null) {
-      collectEvt(RawHBaseWALEvent(put, null, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
-
+      batchBuffer += (RawHBaseWALEvent(put, null, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
     }
     if (del != null) {
-      collectEvt(RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
+      batchBuffer += (RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
     }
+
+    collectEvt(batchBuffer.toSeq)
 
   }
 
@@ -137,7 +142,7 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
 }
 
 trait HBaseWALEventListener {
-  def onEvent(event: RawHBaseWALEvent): Unit
+  def onEvent(event: Seq[RawHBaseWALEvent]): Unit
 }
 
 case class PathAndReader(path: Path, reader: WAL.Reader)
