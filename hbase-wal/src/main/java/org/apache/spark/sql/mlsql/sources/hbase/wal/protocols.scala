@@ -11,7 +11,7 @@ case class NooopsResponse() extends Response[SocketResponse] {
   override def wrap: SocketResponse = SocketResponse(nooopsResponse = this)
 }
 
-case class RequestOffset(names: Seq[String]) extends Request[SocketRequest] {
+case class RequestOffset() extends Request[SocketRequest] {
   override def wrap: SocketRequest = SocketRequest(requestOffset = this)
 }
 

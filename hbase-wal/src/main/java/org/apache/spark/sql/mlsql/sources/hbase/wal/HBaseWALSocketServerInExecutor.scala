@@ -5,6 +5,7 @@ import java.util
 import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.util.Bytes
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset}
 import org.apache.spark.sql.mlsql.sources.hbase.wal.io.{DeleteWriter, PutWriter}
@@ -81,9 +82,8 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
       case _: NooopsRequest =>
         client.sendResponse(dOut, NooopsResponse())
       case _: ShutDownServer => close()
-      case RequestOffset(names) =>
+      case _: RequestOffset =>
         client.sendResponse(dOut, OffsetResponse(committedOffsets.asScala.
-          filter(f => names.contains(f._1)).
           map(f => (f._1, LongOffset.convert(f._2).get.offset)).toMap))
       case RequestData(name, startOffset, endOffset) =>
         try {
@@ -155,7 +155,10 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
   }
 
   override def less(a: Offset, b: Offset): Boolean = {
-    LongOffset.convert(a).get.offset < LongOffset.convert(b).get.offset
+    require(a != null || b != null, "two offsets should not be null at the same time ")
+    if (a == null) true
+    else if (b == null) false
+    else LongOffset.convert(a).get.offset < LongOffset.convert(b).get.offset
   }
 }
 

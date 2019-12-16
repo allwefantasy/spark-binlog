@@ -78,7 +78,7 @@ object ConsumerCache extends Logging {
       val cachedIntConsumer = cache.get(key)
       if (intConsumer.eq(cachedIntConsumer)) {
         // The released consumer is the same object as the cached one.
-        if (intConsumer.markedForClose) {
+        if (intConsumer.isClose) {
           intConsumer.close
           cache.remove(key)
         } else {

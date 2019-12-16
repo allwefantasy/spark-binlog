@@ -15,6 +15,8 @@ trait BinlogConsumer {
 
   def markedForClose: Unit
 
+  def isClose: Boolean
+
   def fetchData(partitionId: String, start: Long, end: Long): Any
 
   def close: Unit

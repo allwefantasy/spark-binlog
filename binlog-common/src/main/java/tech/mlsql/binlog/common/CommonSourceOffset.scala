@@ -1,6 +1,5 @@
 package tech.mlsql.binlog.common
 
-import org.apache.kafka.common.TopicPartition
 import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.json4s.NoTypeHints
@@ -44,7 +43,7 @@ object CommonSourceOffset {
     try {
       Serialization.read[Map[String, Map[Int, Long]]](str).flatMap { case (topic, partOffsets) =>
         partOffsets.map { case (part, offset) =>
-          new TopicPartition(topic, part) -> offset
+          new CommonPartition(topic, part) -> offset
         }
       }.toMap
     } catch {
@@ -68,6 +67,16 @@ object CommonSourceOffset {
    * Returns [[KafkaSourceOffset]] from a variable sequence of (topic, partitionId, offset)
    * tuples.
    */
+  def apply(offset: Offset): CommonSourceOffset = {
+    offset match {
+      case o: CommonSourceOffset => o
+      case so: SerializedOffset => CommonSourceOffset(so)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Invalid conversion from offset of ${offset.getClass} to KafkaSourceOffset")
+    }
+  }
+
   def apply(offsetTuples: (String, Int, Long)*): CommonSourceOffset = {
     CommonSourceOffset(offsetTuples.map { case (t, p, o) => (new CommonPartition(t, p), o) }.toMap)
   }

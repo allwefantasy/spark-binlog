@@ -2,6 +2,7 @@ package org.apache.spark.sql.mlsql.sources.hbase.wal.io;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.spark.sql.mlsql.sources.hbase.wal.RawHBaseWALEvent;
 
 import java.io.IOException;
@@ -30,7 +31,7 @@ public class PutWriter extends AbstractEventWriter {
             String col = new String(cell.getQualifierArray());
 
             jsonGenerator.writeObjectField("rowkey", new String(entry.getKey()));
-            jsonGenerator.writeObjectField(f + ":" + col, "");
+            jsonGenerator.writeObjectField(f + ":" + col, Bytes.toString(entry.getValue().get(0).getRowArray()));
 
             jsonGenerator.writeEndObject();
             jsonGenerator.writeEndArray();

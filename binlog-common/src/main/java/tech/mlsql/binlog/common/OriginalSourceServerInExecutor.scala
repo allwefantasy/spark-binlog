@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 import java.util.regex.Pattern
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.Offset
@@ -51,8 +52,38 @@ abstract class OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference
   protected var aheadLogBufferFlushSize = 100000L
   protected var aheadLogSaveTime = 1000 * 60 * 60 * 24 * 3L
 
-  protected val uncommittedOffsets = new ConcurrentHashMap[String, Offset]()
-  protected val committedOffsets = new ConcurrentHashMap[String, Offset]()
+
+  protected val committedOffsets = {
+    // recover from hdfs
+
+    val res = new ConcurrentHashMap[String, Offset]()
+
+    val path = new Path(checkpointDir, new Path("receivedData"))
+    val hdfsContext = new HDFSContext(path, hadoopConf)
+    if (hdfsContext.fs.exists(path)) {
+      val logFileNames = hdfsContext.fc.listStatus(path)
+      while (logFileNames.hasNext) {
+        val name = logFileNames.next()
+        val aheadLog = createWriteAheadLog(name.getPath.getName)
+        aheadLog.read(events => {
+          events.foreach { event =>
+            if (!res.containsKey(event.key) || less(res.get(event.key()), event.pos())) {
+              res.put(event.key(), event.pos())
+            }
+          }
+        })
+      }
+    }
+    res
+
+  }
+  protected val uncommittedOffsets = {
+    val res = new ConcurrentHashMap[String, Offset]()
+    committedOffsets.asScala.foreach { item =>
+      res.put(item._1, item._2)
+    }
+    res
+  }
 
 
   @volatile private var skipTable = false
@@ -117,10 +148,10 @@ abstract class OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference
 
   }
 
-  abstract def less(a: Offset, b: Offset): Boolean
+  def less(a: Offset, b: Offset): Boolean
 
-  def addRecord(event: RawEvent) = {
-    assertTable
+  def addRecord(event: RawEvent): Unit = {
+    //assertTable
     if (isWriteAheadStorage) {
       if (aheadLogBuffer.size >= aheadLogBufferFlushSize) {
         flushAheadLog
@@ -131,8 +162,8 @@ abstract class OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference
     }
 
     if (isWriteAheadStorage) {
-      aheadLogBuffer.offer(event)
-      if (!uncommittedOffsets.containsKey(event.key) || less(committedOffsets.get(event.key()), event.pos())) {
+      if (!uncommittedOffsets.containsKey(event.key) || less(uncommittedOffsets.get(event.key()), event.pos())) {
+        aheadLogBuffer.offer(event)
         uncommittedOffsets.put(event.key(), event.pos())
       }
 
@@ -161,9 +192,9 @@ abstract class OriginalSourceServerInExecutor[T](taskContextRef: AtomicReference
     logError("onEventDeserializationFailure", ex)
   }
 
-  abstract def connect: Unit
+  def connect: Unit
 
-  abstract def pause: Unit
+  def pause: Unit
 
   def resume: Unit
 

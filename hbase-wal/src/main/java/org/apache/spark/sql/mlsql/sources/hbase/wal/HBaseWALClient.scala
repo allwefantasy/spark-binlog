@@ -1,5 +1,6 @@
 package org.apache.spark.sql.mlsql.sources.hbase.wal
 
+import java.io.EOFException
 import java.nio.charset.Charset
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -12,6 +13,7 @@ import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 import org.apache.spark.streaming.RawEvent
 import tech.mlsql.binlog.common.HDFSContext
+import tech.mlsql.common.utils.log.Logging
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -19,14 +21,13 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * 10/12/2019 WilliamZhu(allwefantasy@gmail.com)
  */
-class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) {
+class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) extends Logging {
   val readers = ArrayBuffer[PathAndReader]()
   val eventListeners = ArrayBuffer[HBaseWALEventListener]()
 
   def connect() = {
     val shouldBreak = new AtomicBoolean(false)
     while (!shouldBreak.get()) {
-      //todo: how to handle hbase move WAL to oldWAls?
       fetch()
     }
   }
@@ -39,26 +40,44 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) {
 
     while (regionServerDirs.hasNext) {
       val path = regionServerDirs.next()
-      val reader = WALFactory.createReader(hdfsContext.fs, walLogPathInHDFS, conf)
+      val targetFilePathIter = hdfsContext.fc.listStatus(path.getPath)
+      val buffer = ArrayBuffer[Path]()
+      while (targetFilePathIter.hasNext) {
+        buffer += targetFilePathIter.next().getPath
+      }
+      val targetFile = buffer.filterNot(f => f.getName.endsWith(".meta")).head
+      val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
       readers += PathAndReader(path.getPath, reader)
     }
 
     readers.foreach { readerAndPath =>
       val shouldBreak = new AtomicBoolean(false)
       while (!shouldBreak.get()) {
-        val entry = readerAndPath.reader.next()
+
+        val entry = try {
+          readerAndPath.reader.next()
+        } catch {
+          case e: EOFException =>
+            logInfo(s"${readerAndPath.path} is moved to oldWALs")
+            //todo: handle the situation hbase wal log moved to oldWALs
+            null
+        }
+
+
         if (entry == null) {
           shouldBreak.set(true)
-        }
-        eventListeners.foreach { el =>
-          map(entry, (evt) => {
-            el.onEvent(evt)
-          })
+        } else {
+          eventListeners.foreach { el =>
+            map(entry, (evt) => {
+              el.onEvent(evt)
+            })
+          }
 
         }
       }
-      readerAndPath.reader.close()
     }
+    readers.foreach(_.reader.close())
+    readers.clear()
 
   }
 
@@ -82,11 +101,11 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) {
     value.getCells().asScala.filterNot(WALEdit.isMetaEditFamily(_)).foreach { cell =>
       if (lastCell == null || lastCell.getTypeByte != cell.getTypeByte || !CellUtil.matchingRows(lastCell, cell)) {
         if (put != null) {
-          collectEvt(RawHBaseWALEvent(put, null, tableOut, RawHBaseEventOffset(regionName, sequenceId), time))
+          collectEvt(RawHBaseWALEvent(put, null, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
 
         }
         if (del != null) {
-          collectEvt(RawHBaseWALEvent(null, del, tableOut, RawHBaseEventOffset(regionName, sequenceId), time))
+          collectEvt(RawHBaseWALEvent(null, del, db, table, RawHBaseEventOffset(regionName, sequenceId), time))
         }
         if (CellUtil.isDelete(cell)) {
           del = new Delete(CellUtil.cloneRow(cell))
@@ -94,7 +113,6 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) {
           put = new Put(CellUtil.cloneRow(cell))
         }
       }
-
       if (CellUtil.isDelete(cell)) {
         del.add(cell)
       } else {
@@ -125,6 +143,7 @@ trait HBaseWALEventListener {
 case class PathAndReader(path: Path, reader: WAL.Reader)
 
 case class RawHBaseWALEvent(put: Put, del: Delete, db: String, table: String, offset: RawHBaseEventOffset, time: Long) extends RawEvent {
+
   override def key(): String = offset.regionName
 
   override def pos(): Offset = LongOffset(offset.sequenceId)

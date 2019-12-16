@@ -67,6 +67,8 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
     val tempSocketServerHost = tempServer._host
     val tempSocketServerPort = tempServer._port
 
+    val walLogPath = parameters("walLogPath")
+    val startTime = parameters.getOrElse("startTime", "0").toLong
 
     def launchHBaseWALServer = {
       spark.sparkContext.setJobGroup(binlogServerId, s"hbase WAL server", true)
@@ -75,6 +77,8 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
         taskContextRef.set(TaskContext.get())
 
         val walServer = new HBaseWALSocketServerInExecutor(taskContextRef, checkPointDir, confBr.value.value, true)
+        walServer.setWalLogPath(walLogPath)
+        walServer.setStartTime(startTime)
 
         def sendStopServerRequest = {
           val client = new SocketClient()
@@ -110,11 +114,12 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
         }
 
         sendHBaseWALServerInfoBackToDriver
+        walServer.connect
         while (!TaskContext.get().isInterrupted() && !walServer.isClosed) {
           Thread.sleep(1000)
         }
-        ()
-      }
+        ""
+      }.collect()
     }
 
     new Thread("launch-hbase-wal-socket-server-in-spark-job") {
@@ -245,11 +250,11 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
 
     initialPartitionOffsets
 
-    val untilPartitionOffsets = end.asInstanceOf[CommonSourceOffset]
+    val untilPartitionOffsets = CommonSourceOffset(end)
 
     // On recovery, getBatch will get called before getOffset
     if (currentPartitionOffsets.isEmpty) {
-      currentPartitionOffsets = untilPartitionOffsets
+      currentPartitionOffsets = Option(untilPartitionOffsets)
     }
 
     if (start.isDefined && start.get == end) {
@@ -261,7 +266,7 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
     // In normal case, we will recover the start from checkpoint offset directory
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
-        prevBatchEndOffset.asInstanceOf[CommonSourceOffset]
+        CommonSourceOffset(prevBatchEndOffset)
       case None =>
         initialPartitionOffsets
     }
@@ -289,15 +294,23 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
       }
     }.toArray
 
-    val rdd = spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
-      val consumer = ConsumerCache.acquire(executorBinlogServerCopy, () => {
-        new ExecutorInternalBinlogConsumer(executorBinlogServerCopy)
-      })
-      consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
-    }.map { cr =>
-      InternalRow(UTF8String.fromString(cr))
+    val rdd = if (offsetRanges.length == 0) {
+      logWarning("No offsets found in HBase WAL.")
+      spark.sparkContext.emptyRDD[InternalRow]
+
+    } else {
+      spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
+        val consumer = ConsumerCache.acquire(executorBinlogServerCopy, () => {
+          new ExecutorInternalBinlogConsumer(executorBinlogServerCopy)
+        })
+        consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
+      }.map { cr =>
+        InternalRow(UTF8String.fromString(cr))
+      }
     }
-    spark.sqlContext.internalCreateDataFrame(rdd.setName("incremental-data"), schema, isStreaming = true)
+    rdd.setName("incremental-data")
+    spark.sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
+
   }
 
   override def stop(): Unit = {
@@ -333,9 +346,11 @@ case class ExecutorInternalBinlogConsumer(hostAndPort: ReportHostAndPort) extend
 
   override def markedForClose: Unit = _markedForClose = true
 
+  override def isClose: Boolean = _markedForClose
+
   override def fetchData(partitionId: String, start: Long, end: Long): Any = {
     try {
-      client.sendRequest(dOut, RequestData(
+      client.sendRequest(dOut, RequestData(partitionId,
         start,
         end))
       val response = client.readIterator(dIn)
