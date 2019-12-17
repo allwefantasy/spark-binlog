@@ -7,19 +7,18 @@ import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.mlsql.sources.hbase.wal._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, LaunchSourceConsumerAndProducer, SQLContext, SparkSession}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SerializableConfiguration, TaskCompletionListener, TaskFailureListener}
-import org.apache.spark.{SparkEnv, TaskContext}
 import tech.mlsql.binlog.common._
-import tech.mlsql.common.utils.distribute.socket.server.{ReportHostAndPort, ReportSingleAction, SocketServerSerDer, TempSocketServerInDriver}
-import tech.mlsql.common.utils.network.NetUtils
+import tech.mlsql.common.utils.distribute.socket.server.ReportHostAndPort
 
 /**
  * 9/12/2019 WilliamZhu(allwefantasy@gmail.com)
@@ -36,49 +35,22 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
   }
 
   override def createSource(sqlContext: SQLContext, metadataPath: String, schema: Option[StructType], providerName: String, parameters: Map[String, String]): Source = {
+
+
     val spark = sqlContext.sparkSession
-    val conf = spark.sessionState.newHadoopConf()
-    val confBr = spark.sparkContext.broadcast(new SerializableConfiguration(conf))
-
-    val binlogServerId = UUID.randomUUID().toString
-    val timezoneID = spark.sessionState.conf.sessionLocalTimeZone
-    val checkPointDir = metadataPath.stripSuffix("/").split("/").
-      dropRight(2).mkString("/")
-
-    val hostAndPortContext = new AtomicReference[ReportHostAndPort]()
-
-    val tempServer = new TempSocketServerInDriver(hostAndPortContext) {
-      def close = {
-        _server.close()
-      }
-
-      override def host: String = {
-        if (SparkEnv.get == null) {
-          //When SparkEnv.get is null, the program may run in a test
-          //So return local address would be ok.
-          "127.0.0.1"
-        } else {
-          val hostName = tech.mlsql.common.utils.network.SparkExecutorInfo.getInstance.hostname
-          if (hostName == null) NetUtils.getHost else hostName
-        }
-      }
-    }
-
-    val tempSocketServerHost = tempServer._host
-    val tempSocketServerPort = tempServer._port
 
     val walLogPath = parameters("walLogPath")
     val startTime = parameters.getOrElse("startTime", "0").toLong
     val aheadLogBufferFlushSize = parameters.getOrElse("aheadLogBufferFlushSize", "-1").toLong
     val aheadLogSaveTime = parameters.getOrElse("aheadLogSaveTime", "-1").toLong
 
-    def launchHBaseWALServer = {
-      spark.sparkContext.setJobGroup(binlogServerId, s"hbase WAL server", true)
-      spark.sparkContext.parallelize(Seq("launch-hbase-wal-socket-server"), 1).map { item =>
-        val taskContextRef: AtomicReference[TaskContext] = new AtomicReference[TaskContext]()
-        taskContextRef.set(TaskContext.get())
+    val launchSourceConsumerAndProducer = new LaunchSourceConsumerAndProducer(spark)
+    val binlogServerId = UUID.randomUUID().toString
 
-        val walServer = new HBaseWALSocketServerInExecutor(taskContextRef, checkPointDir, confBr.value.value, true)
+    val hostAndPort = launchSourceConsumerAndProducer.launch[TaskContext](metadataPath, binlogServerId,
+      // create server logic
+      (taskContextRef: AtomicReference[TaskContext], checkPointDir: String, conf: Configuration) => {
+        val walServer = new HBaseWALSocketServerInExecutor[TaskContext](taskContextRef, checkPointDir, conf, true)
         walServer.setWalLogPath(walLogPath)
         walServer.setStartTime(startTime)
 
@@ -89,68 +61,20 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
         if (aheadLogSaveTime != -1) {
           walServer.setAheadLogBufferFlushSize(aheadLogSaveTime)
         }
+        walServer
+      },
+      // register callback when task is interrupted then we should kill the server
+      (walServer: OriginalSourceServerInExecutor[TaskContext]) => {
+        val client = new SocketClient()
+        val clientSocket = new Socket(walServer._host, walServer._port)
+        val dout2 = new DataOutputStream(clientSocket.getOutputStream)
+        client.sendRequest(dout2, ShutDownServer())
+        dout2.close()
+        clientSocket.close()
+      })
 
-        def sendStopServerRequest = {
-          val client = new SocketClient()
-          val clientSocket = new Socket(walServer._host, walServer._port)
-          val dout2 = new DataOutputStream(clientSocket.getOutputStream)
-          client.sendRequest(dout2, ShutDownServer())
-          dout2.close()
-          clientSocket.close()
-        }
 
-        TaskContext.get().addTaskFailureListener(new TaskFailureListener {
-          override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-            taskContextRef.set(null)
-            sendStopServerRequest
-
-          }
-        })
-
-        TaskContext.get().addTaskCompletionListener(new TaskCompletionListener {
-          override def onTaskCompletion(context: TaskContext): Unit = {
-            taskContextRef.set(null)
-            sendStopServerRequest
-          }
-        })
-
-        def sendHBaseWALServerInfoBackToDriver = {
-          val client = new SocketServerSerDer[ReportSingleAction, ReportSingleAction]() {}
-          val socket = new Socket(tempSocketServerHost, tempSocketServerPort)
-          val dout = new DataOutputStream(socket.getOutputStream)
-          client.sendRequest(dout, ReportHostAndPort(walServer._host, walServer._port))
-          dout.close()
-          socket.close()
-        }
-
-        sendHBaseWALServerInfoBackToDriver
-        walServer.connect
-        while (!TaskContext.get().isInterrupted() && !walServer.isClosed) {
-          Thread.sleep(1000)
-        }
-        ""
-      }.collect()
-    }
-
-    new Thread("launch-hbase-wal-socket-server-in-spark-job") {
-      setDaemon(true)
-
-      override def run(): Unit = {
-        launchHBaseWALServer
-      }
-    }.start()
-
-    var count = 60
-
-    while (hostAndPortContext.get() == null) {
-      Thread.sleep(1000)
-      count -= 1
-    }
-    if (hostAndPortContext.get() == null) {
-      throw new RuntimeException("start HBaseWALSocketServerInExecutor fail")
-    }
-    tempServer.close
-    MLSQLHBaseWAlSource(hostAndPortContext.get(), sqlContext.sparkSession, metadataPath, parameters ++ Map("binlogServerId" -> binlogServerId))
+    MLSQLHBaseWAlSource(hostAndPort, sqlContext.sparkSession, metadataPath, parameters ++ Map("binlogServerId" -> binlogServerId))
   }
 
   override def shortName(): String = "hbaseWAL"
@@ -311,8 +235,8 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
 
     } else {
       spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
-        val consumer = ConsumerCache.acquire(ReportHostAndPort(walServerHost,walServerPort), () => {
-          new ExecutorInternalBinlogConsumer(ReportHostAndPort(walServerHost,walServerPort))
+        val consumer = ConsumerCache.acquire(ReportHostAndPort(walServerHost, walServerPort), () => {
+          new ExecutorInternalBinlogConsumer(ReportHostAndPort(walServerHost, walServerPort))
         })
         consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
       }.map { cr =>

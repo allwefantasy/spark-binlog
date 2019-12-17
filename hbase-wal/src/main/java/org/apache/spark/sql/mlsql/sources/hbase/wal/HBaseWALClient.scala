@@ -45,10 +45,15 @@ class HBaseWALClient(walLogPath: String, startTime: Long, conf: Configuration) e
       while (targetFilePathIter.hasNext) {
         buffer += targetFilePathIter.next().getPath
       }
-      val targetFiles = buffer.filterNot(f => f.getName.endsWith(".meta")).sortBy(f=>f.getName)
+      val targetFiles = buffer.filterNot(f => f.getName.endsWith(".meta")).sortBy(f => f.getName)
       targetFiles.foreach { targetFile =>
-        val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
-        readers += PathAndReader(path.getPath, reader)
+        try {
+          val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
+          readers += PathAndReader(path.getPath, reader)
+        } catch {
+          case e: EOFException => logInfo(s"HBase WAL read ${path.getPath} fail")
+        }
+
       }
 
     }
