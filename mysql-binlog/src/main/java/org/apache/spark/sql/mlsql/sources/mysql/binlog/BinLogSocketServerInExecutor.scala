@@ -440,7 +440,8 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
             if (isWriteAheadStorage) {
               sendMark(dOut, SocketReplyMark.HEAD) // 先发一个开始位
               writeAheadLog.read((records) => {
-                records.foreach { record =>
+                records.foreach { _record =>
+                  val record = _record.asInstanceOf[RawBinlogEvent]
                   if (toOffset(record) >= start && toOffset(record) < end) {
                     //                    res ++= convertRawBinlogEventRecord(record).asScala
                     iterativeSendData(dOut, DataResponse(convertRawBinlogEventRecord(record).asScala.toList))
