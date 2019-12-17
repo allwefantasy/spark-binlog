@@ -25,8 +25,10 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
   private val client = new SocketClient()
   private var originSourceClient: HBaseWALClient = null
   private var walLogPath: String = ""
+  private var oldWALLogPath: String = ""
   private var startTime: Long = 0L
 
+  def setOldWALLogPath(oldWALLogPath: String) = this.oldWALLogPath = oldWALLogPath
 
   def setWalLogPath(walLogPath: String) = this.walLogPath = walLogPath
 
@@ -127,7 +129,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
 
       override def run(): Unit = {
         try {
-          val hbaseWALclient = new HBaseWALClient(walLogPath, startTime, hadoopConf)
+          val hbaseWALclient = new HBaseWALClient(walLogPath,oldWALLogPath, startTime, hadoopConf)
           hbaseWALclient.register(new HBaseWALEventListener {
             override def onEvent(event: Seq[RawHBaseWALEvent]): Unit = {
               if (event.size > 0) {

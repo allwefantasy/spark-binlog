@@ -40,6 +40,7 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
     val spark = sqlContext.sparkSession
 
     val walLogPath = parameters("walLogPath")
+    val oldWALLogPath = parameters("oldWALLogPath")
     val startTime = parameters.getOrElse("startTime", "0").toLong
     val aheadLogBufferFlushSize = parameters.getOrElse("aheadLogBufferFlushSize", "-1").toLong
     val aheadLogSaveTime = parameters.getOrElse("aheadLogSaveTime", "-1").toLong
@@ -52,6 +53,7 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
       (taskContextRef: AtomicReference[TaskContext], checkPointDir: String, conf: Configuration) => {
         val walServer = new HBaseWALSocketServerInExecutor[TaskContext](taskContextRef, checkPointDir, conf, true)
         walServer.setWalLogPath(walLogPath)
+        walServer.setOldWALLogPath(oldWALLogPath)
         walServer.setStartTime(startTime)
 
         if (aheadLogBufferFlushSize != -1) {

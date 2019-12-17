@@ -17,6 +17,7 @@ class Test extends FunSuite {
     val df = spark.readStream.
       format("org.apache.spark.sql.mlsql.sources.hbase.MLSQLHBaseWALDataSource").
       option("walLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/WALs").
+      option("oldWALLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/oldWALs").
       option("startTime", "1").
       option("databaseNamePattern", "test").
       option("tableNamePattern", "mlsql_binlog").
@@ -25,8 +26,8 @@ class Test extends FunSuite {
     val query = df.writeStream.
       format("console").
       option("mode", "Append").
-      option("truncate","false").
-      option("numRows","100000").
+      option("truncate", "false").
+      option("numRows", "100000").
       option("checkpointLocation", "/tmp/cpl-binlog25").
       outputMode("append")
       .trigger(Trigger.ProcessingTime("10 seconds"))
