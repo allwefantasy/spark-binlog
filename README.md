@@ -170,7 +170,7 @@ spark.close()
 
 DataFrame code:
 
-```
+```scala
 val spark = SparkSession.builder()
       .master("local[*]")
       .appName("HBase WAL Sync")
