@@ -5,6 +5,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.regex.Pattern
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
@@ -45,6 +46,9 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
     val aheadLogBufferFlushSize = parameters.getOrElse("aheadLogBufferFlushSize", "-1").toLong
     val aheadLogSaveTime = parameters.getOrElse("aheadLogSaveTime", "-1").toLong
 
+    val databaseNamePattern = parameters.get("databaseNamePattern")
+    val tableNamePattern = parameters.get("tableNamePattern")
+
     val launchSourceConsumerAndProducer = new LaunchSourceConsumerAndProducer(spark)
     val binlogServerId = UUID.randomUUID().toString
 
@@ -55,6 +59,8 @@ class MLSQLHBaseWALDataSource extends StreamSourceProvider with DataSourceRegist
         walServer.setWalLogPath(walLogPath)
         walServer.setOldWALLogPath(oldWALLogPath)
         walServer.setStartTime(startTime)
+        walServer.setDatabaseNamePattern(databaseNamePattern.map(Pattern.compile(_)))
+        walServer.setTableNamePattern(tableNamePattern.map(Pattern.compile(_)))
 
         if (aheadLogBufferFlushSize != -1) {
           walServer.setAheadLogBufferFlushSize(aheadLogBufferFlushSize)
@@ -188,7 +194,7 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
 
     val untilPartitionOffsets = CommonSourceOffset(end)
 
-    // On recovery, getBatch will get called before getOffset
+
     if (currentPartitionOffsets.isEmpty) {
       currentPartitionOffsets = Option(untilPartitionOffsets)
     }
@@ -210,15 +216,17 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
     val walServerHost = hostAndPort.host
     val walServerPort = hostAndPort.port
 
-    val offsetRanges = fromPartitionOffsets.partitionToOffsets.map(f => f._1).map { tp =>
+
+    val offsetRanges = untilPartitionOffsets.partitionToOffsets.map(f => f._1).map { tp =>
       val fromOffset = fromPartitionOffsets.partitionToOffsets.get(tp).getOrElse {
-        fromPartitionOffsets.partitionToOffsets.getOrElse(tp, {
-          // This should not happen since newPartitionOffsets contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-        })
+        logWarning(s"New region is found ${tp.topic()}, fromOffset from -1L")
+        -1L
       }
-      val untilOffset = untilPartitionOffsets.partitionToOffsets(tp)
+      val untilOffset = untilPartitionOffsets.partitionToOffsets.getOrElse(tp, {
+        logWarning(s"fromPartitionOffsets:${fromPartitionOffsets} untilPartitionOffsets:${untilPartitionOffsets}  " +
+          s"untilPartitionOffsets do not contains ${tp}. This is normally caused by the WAL directory is empty or some region is missing")
+        fromOffset
+      })
 
       CommonOffsetRange(tp, fromOffset, untilOffset)
     }.filter { range =>
@@ -226,44 +234,47 @@ case class MLSQLHBaseWAlSource(hostAndPort: ReportHostAndPort, spark: SparkSessi
         throw new RuntimeException(s"Partition ${range.commonPartition}'s offset was changed from " +
           s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
         false
-      } else {
-        true
       }
+       else {
+      true
+    }
     }.toArray
 
-    val rdd = if (offsetRanges.length == 0) {
-      logWarning("No offsets found in HBase WAL.")
-      spark.sparkContext.emptyRDD[InternalRow]
+  val rdd = if (offsetRanges.length == 0) {
+    logWarning("No offsets found in HBase WAL.")
+    spark.sparkContext.emptyRDD[InternalRow]
 
-    } else {
-      spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
-        val consumer = ConsumerCache.acquire(ReportHostAndPort(walServerHost, walServerPort), () => {
-          new ExecutorInternalBinlogConsumer(ReportHostAndPort(walServerHost, walServerPort))
-        })
-        consumer.fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
-      }.map { cr =>
-        InternalRow(UTF8String.fromString(cr))
+  } else {
+    spark.sparkContext.parallelize(offsetRanges.toSeq, offsetRanges.length).flatMap { range =>
+      val consumer = ConsumerCache.acquire(ReportHostAndPort(walServerHost, walServerPort), () => {
+        new ExecutorInternalBinlogConsumer(ReportHostAndPort(walServerHost, walServerPort))
       }
+      )
+      consumer
+      .fetchData(range.commonPartition.topic(), range.fromOffset, range.untilOffset).asInstanceOf[Iterator[String]]
+    }.map { cr =>
+      InternalRow(UTF8String.fromString(cr))
     }
-    rdd.setName("incremental-data")
-    spark.sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
-
   }
+  rdd.setName("incremental-data")
+  spark.sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
 
-  override def stop(): Unit = {
-    // when the structure streaming is stopped(caused by  exception or manually killed),
-    // we should make sure the binlog server is also killed.
-    // here we use the binlogServerId as the spark job group id, and so we can cancel it.
-    // Also notice that we should close the socket which we use to fetch the offset.
-    try {
-      spark.sparkContext.cancelJobGroup(parameters("binlogServerId"))
-      socket.close()
-    } catch {
-      case e: Exception =>
-        logError("", e)
-    }
+}
 
-  }
+override def stop (): Unit = {
+// when the structure streaming is stopped(caused by  exception or manually killed),
+// we should make sure the binlog server is also killed.
+// here we use the binlogServerId as the spark job group id, and so we can cancel it.
+// Also notice that we should close the socket which we use to fetch the offset.
+try {
+spark.sparkContext.cancelJobGroup (parameters ("binlogServerId") )
+socket.close ()
+} catch {
+case e: Exception =>
+logError ("", e)
+}
+
+}
 }
 
 case class ExecutorInternalBinlogConsumer(hostAndPort: ReportHostAndPort) extends BinlogConsumer {

@@ -126,18 +126,20 @@ class HBaseWALClient(walLogPath: String, oldWALLogPath: String, startTime: Long,
         buffer += targetFilePathIter.next().getPath
       }
       val targetFiles = buffer.filterNot(f => f.getName.endsWith(".meta")).sortBy(f => f.getName)
-      val activeFile = targetFiles.last
-      activeWalFiles += (activeFile.toString)
-      targetFiles.filterNot { f =>
-        walDoneFiles.getIfPresent(f.toString) != null
-      }.foreach { targetFile =>
-        try {
-          val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
-          readers += PathAndReader(path.getPath, reader)
-        } catch {
-          case e: EOFException => logInfo(s"HBase WAL read ${path.getPath} fail")
-        }
+      if (targetFiles.size > 0) {
+        val activeFile = targetFiles.last
+        activeWalFiles += (activeFile.toString)
+        targetFiles.filterNot { f =>
+          walDoneFiles.getIfPresent(f.toString) != null
+        }.foreach { targetFile =>
+          try {
+            val reader = WALFactory.createReader(hdfsContext.fs, targetFile, conf)
+            readers += PathAndReader(path.getPath, reader)
+          } catch {
+            case e: EOFException => logInfo(s"HBase WAL read ${path.getPath} fail")
+          }
 
+        }
       }
 
     }
@@ -155,8 +157,8 @@ class HBaseWALClient(walLogPath: String, oldWALLogPath: String, startTime: Long,
   private def map(entry: WAL.Entry, collectEvt: (Seq[RawHBaseWALEvent]) => Unit) = {
     val key = entry.getKey
     val value = entry.getEdit
-    val db = key.getTableName.getNameAsString
-    val table = key.getTableName.getQualifierAsString
+    val db = key.getTableName.getNamespaceAsString
+    val table = key.getTableName.getNameAsString
     val sequenceId = key.getSequenceId
     val regionName = new String(key.getEncodedRegionName, Charset.forName("utf-8"))
     val time = key.getWriteTime

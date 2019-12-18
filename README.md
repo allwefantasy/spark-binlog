@@ -17,18 +17,38 @@ You can link against this library in your program at the following coordinates:
 
 ### Scala 2.11
 
-```sql
+This is the latest stable version for MySQL binlog:
+
+```
 groupId: tech.mlsql
 artifactId: spark-binlog_2.11
 version: 0.2.2
 ```
 
+This is the latest SNAPSHOT versions.
+
+MySQL Binlog:
+
+```      
+groupId: tech.mlsql
+artifactId: mysql-binlog_2.11
+version: 1.0.0-SNAPSHOT
+```
+
+HBase WAL:
+
+```      
+groupId: tech.mlsql
+artifactId: hbase-wal_2.11
+version: 1.0.0-SNAPSHOT
+```
+
 ## Limitation
 
-1. Version 0.2.2-SNAPSHOT only support insert/update/delete events. The other events will ignore.
-2. Only MySQL Binlog is supported in version 0.2.2-SNAPSHOT
+1. mysql-binlog only support insert/update/delete events. The other events will ignore.
+2. hbase-wal only support Put/Delete events. The other events will ignore.
 
-## Usage
+## MySQL Binlog Usage
 
 The example should work with [delta-plus](https://github.com/allwefantasy/delta-plus)
 
@@ -146,9 +166,40 @@ df.write
 spark.close()
 ```
 
+## HBase WAL Usage
+
+DataFrame code:
+
+```
+val spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("HBase WAL Sync")
+      .getOrCreate()
+
+    val df = spark.readStream.
+      format("org.apache.spark.sql.mlsql.sources.hbase.MLSQLHBaseWALDataSource").
+      option("walLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/WALs").
+      option("oldWALLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/oldWALs").
+      option("startTime", "1").
+      option("databaseNamePattern", "test").
+      option("tableNamePattern", "mlsql_binlog").
+      load()
+
+    val query = df.writeStream.
+      format("console").
+      option("mode", "Append").
+      option("truncate", "false").
+      option("numRows", "100000").
+      option("checkpointLocation", "/tmp/cpl-binlog25").
+      outputMode("append")
+      .trigger(Trigger.ProcessingTime("10 seconds"))
+      .start()
+
+    query.awaitTermination()
+```
+
 ## RoadMap
 
-Until 0.2.2-SNAPSHOT, spark-binlog only supports binlog for MySQL.
 We hope we can support more DBs including traditional DB e.g Oracle and 
 NoSQL e.g. HBase(WAL),ES,Cassandra in future.  
 

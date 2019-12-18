@@ -19,8 +19,8 @@ class Test extends FunSuite {
       option("walLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/WALs").
       option("oldWALLogPath", "/Users/allwefantasy/Softwares/hbase-2.1.8/oldWALs").
       option("startTime", "1").
-      option("databaseNamePattern", "test").
-      option("tableNamePattern", "mlsql_binlog").
+      option("databaseNamePattern", "default").
+      option("tableNamePattern", "mlsql_example").
       load()
 
     val query = df.writeStream.

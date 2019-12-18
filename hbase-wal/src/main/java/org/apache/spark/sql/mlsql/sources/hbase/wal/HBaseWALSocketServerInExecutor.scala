@@ -3,6 +3,7 @@ package org.apache.spark.sql.mlsql.sources.hbase.wal
 import java.io.{DataInputStream, DataOutputStream}
 import java.util
 import java.util.concurrent.atomic.AtomicReference
+import java.util.regex.Pattern
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkEnv
@@ -33,6 +34,10 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
   def setWalLogPath(walLogPath: String) = this.walLogPath = walLogPath
 
   def setStartTime(startTime: Long) = this.startTime = startTime
+
+  def setDatabaseNamePattern(databaseNamePattern: Option[Pattern]) = this.databaseNamePattern = databaseNamePattern
+
+  def setTableNamePattern(tableNamePattern: Option[Pattern]) = this.tableNamePattern = tableNamePattern
 
   override def connect: Unit = {
     assert(walLogPath != "", "walLogPath is required")
@@ -123,15 +128,24 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
     }
   }
 
+  def matchTable(item: RawHBaseWALEvent) = {
+    (databaseNamePattern
+      .map(_.matcher(item.db).matches())
+      .getOrElse(false) && tableNamePattern
+      .map(_.matcher(item.table).matches())
+      .getOrElse(false))
+  }
+
   def connectWAL(walLogPath: String, startTime: Long) = {
     connectThread = new Thread(s"connect hbase wal in ${walLogPath} ") {
       setDaemon(true)
 
       override def run(): Unit = {
         try {
-          val hbaseWALclient = new HBaseWALClient(walLogPath,oldWALLogPath, startTime, hadoopConf)
+          val hbaseWALclient = new HBaseWALClient(walLogPath, oldWALLogPath, startTime, hadoopConf)
           hbaseWALclient.register(new HBaseWALEventListener {
-            override def onEvent(event: Seq[RawHBaseWALEvent]): Unit = {
+            override def onEvent(_event: Seq[RawHBaseWALEvent]): Unit = {
+              val event = _event.filter(matchTable(_))
               if (event.size > 0) {
                 val newEvt = RawHBaseWALEventsSerialization(event.head.key(), event.head.pos(), event.map(f => convertRawBinlogEventRecord(f)).flatMap(f => f.asScala).toList)
                 addRecord(newEvt)
