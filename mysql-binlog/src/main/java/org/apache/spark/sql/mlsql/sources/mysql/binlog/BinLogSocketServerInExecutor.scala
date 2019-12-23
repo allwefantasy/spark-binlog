@@ -233,27 +233,18 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
             } else currentTable = null
 
-          case PRE_GA_WRITE_ROWS =>
-          case WRITE_ROWS =>
-          case EXT_WRITE_ROWS =>
+          case _type if(isWrite(_type)) =>
             if (!skipTable) addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.INSERT_EVENT)
 
-
-          case PRE_GA_UPDATE_ROWS =>
-          case UPDATE_ROWS =>
-          case EXT_UPDATE_ROWS =>
+          case _type if(isUpdate(_type)) =>
             if (!skipTable) {
               addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.UPDATE_EVENT)
             }
 
-
-          case PRE_GA_DELETE_ROWS =>
-          case DELETE_ROWS =>
-          case EXT_DELETE_ROWS =>
+          case _type if(isDelete(_type)) =>
             if (!skipTable) {
               addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.DELETE_EVENT)
             }
-
 
           case ROTATE =>
             val rotateEventData = event.getData[RotateEventData]()
