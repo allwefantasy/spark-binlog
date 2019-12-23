@@ -16,6 +16,11 @@ import java.util.Map;
 
 public class UpdateRowsWriter extends AbstractEventWriter {
 
+    private String timeZone;
+
+    public UpdateRowsWriter(String timeZone) {
+        this.timeZone = timeZone;
+    }
 
     @Override
     public List<String> writeEvent(RawBinlogEvent event) {
@@ -44,10 +49,11 @@ public class UpdateRowsWriter extends AbstractEventWriter {
         jsonGenerator.writeStartObject();
 
         while (i != -1) {
-            String columnName = new SchemaTool(tableInfo.getSchema()).getColumnNameByIndex(i);
+            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone);
+            String columnName = schemaTool.getColumnNameByIndex();
             Serializable[] newRow = row.getValue();
             if (newRow != null) {
-                jsonGenerator.writeObjectField(columnName, MySQLCDCUtils.getWritableObject(newRow[i]));
+                jsonGenerator.writeObjectField(columnName, MySQLCDCUtils.getWritableObject(schemaTool, newRow[i]));
             }
             i = includedColumns.nextSetBit(i + 1);
         }

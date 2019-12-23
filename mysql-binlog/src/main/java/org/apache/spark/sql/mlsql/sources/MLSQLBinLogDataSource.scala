@@ -24,11 +24,11 @@ import tech.mlsql.common.utils.path.PathFun
 
 
 /**
-  * This Datasource is used to consume MySQL binlog. Not support MariaDB yet because the connector we are using is
-  * lack of the ability.
-  * If you want to use this to upsert delta table, please set MySQL binlog_row_image to full so we can get the complete
-  * record after updating.
-  */
+ * This Datasource is used to consume MySQL binlog. Not support MariaDB yet because the connector we are using is
+ * lack of the ability.
+ * If you want to use this to upsert delta table, please set MySQL binlog_row_image to full so we can get the complete
+ * record after updating.
+ */
 class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister with Logging {
 
 
@@ -43,16 +43,17 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
   }
 
   /**
-    * First, we will launch a task to
-    *    1. start binlog client and setup a queue (where we put the binlog event)
-    *    2. start a new socket the the executor where the task runs on, and return the connection message.
-    * Second, Launch the MLSQLBinLogSource to consume the events:
-    *    3. MLSQLBinLogSource get the host/port message and connect it to fetch the data.
-    *    4. For now ,we will not support continue streaming.
-    */
+   * First, we will launch a task to
+   *    1. start binlog client and setup a queue (where we put the binlog event)
+   *    2. start a new socket the the executor where the task runs on, and return the connection message.
+   * Second, Launch the MLSQLBinLogSource to consume the events:
+   *    3. MLSQLBinLogSource get the host/port message and connect it to fetch the data.
+   *    4. For now ,we will not support continue streaming.
+   */
   override def createSource(sqlContext: SQLContext, metadataPath: String, schema: Option[StructType], providerName: String, parameters: Map[String, String]): Source = {
 
     val spark = sqlContext.sparkSession
+    val timezoneID = spark.sessionState.conf.sessionLocalTimeZone
     val logPrefix = parameters.getOrElse("logPrefix", "")
     val bingLogHost = parameters("host")
     val bingLogPort = parameters("port").toInt
@@ -142,7 +143,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
         val taskContextRef: AtomicReference[TaskContext] = new AtomicReference[TaskContext]()
         taskContextRef.set(TaskContext.get())
         val BAD_BINLOG_ERROR_CODE = 1236
-        val executorBinlogServer = new BinLogSocketServerInExecutor(taskContextRef, checkPointDir, broadcastedHadoopConf.value)
+        val executorBinlogServer = new BinLogSocketServerInExecutor(taskContextRef, checkPointDir, timezoneID, broadcastedHadoopConf.value)
         executorBinlogServer.setMaxBinlogQueueSize(maxBinlogQueueSize)
         executorBinlogServer.onMySQLCommunicationFailure = (ex: Exception) => {
           if (ex.isInstanceOf[ServerException]) {
@@ -228,13 +229,13 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
 }
 
 /**
-  * This implementation will not work in production. We should do more thing on
-  * something like fault recovery.
-  *
-  * @param executorBinlogServer
-  * @param spark
-  * @param parameters
-  */
+ * This implementation will not work in production. We should do more thing on
+ * something like fault recovery.
+ *
+ * @param executorBinlogServer
+ * @param spark
+ * @param parameters
+ */
 case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
                              spark: SparkSession,
                              metadataPath: String,
@@ -408,7 +409,7 @@ case class ExecutorInternalBinlogConsumer(executorBinlogServer: ExecutorBinlogSe
       //      val response = readResponse(dIn)
       val response = readIteratedResponse(dIn)
       //      response.asInstanceOf[DataResponse].data
-      response.flatMap(f=>f.asInstanceOf[DataResponse].data)
+      response.flatMap(f => f.asInstanceOf[DataResponse].data)
     } finally {
       ExecutorBinlogServerConsumerCache.release(this)
     }
