@@ -15,6 +15,11 @@ import java.util.List;
 
 public class DeleteRowsWriter extends AbstractEventWriter {
 
+    private String timeZone;
+
+    public DeleteRowsWriter(String timeZone) {
+        this.timeZone = timeZone;
+    }
 
     @Override
     public List<String> writeEvent(RawBinlogEvent event) {
@@ -42,9 +47,10 @@ public class DeleteRowsWriter extends AbstractEventWriter {
         int i = includedColumns.nextSetBit(0);
         jsonGenerator.writeStartObject();
         while (i != -1) {
-            String columnName = new SchemaTool(tableInfo.getSchema()).getColumnNameByIndex(i);
+            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone);
+            String columnName = schemaTool.getColumnNameByIndex();
             if (row[i] != null) {
-                jsonGenerator.writeObjectField(columnName, MySQLCDCUtils.getWritableObject(row[i]));
+                jsonGenerator.writeObjectField(columnName, MySQLCDCUtils.getWritableObject(schemaTool, row[i]));
             }
 
             i = includedColumns.nextSetBit(i + 1);

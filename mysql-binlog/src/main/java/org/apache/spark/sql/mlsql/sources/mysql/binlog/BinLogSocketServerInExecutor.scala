@@ -24,9 +24,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 /**
-  * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
-  */
-class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String,
+ * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
+ */
+class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String, timezone: String,
                                       hadoopConf: Configuration, isWriteAheadStorage: Boolean = true)
   extends SocketServerInExecutor[T](taskContextRef, "binlog-socket-server-in-executor")
     with BinLogSocketServerSerDer with Logging {
@@ -70,9 +70,9 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   private val currentQueueSize = new AtomicLong(0)
 
-  val updateRowsWriter = new UpdateRowsWriter()
-  val deleteRowsWriter = new DeleteRowsWriter()
-  val insertRowsWriter = new InsertRowsWriter()
+  val updateRowsWriter = new UpdateRowsWriter(timezone)
+  val deleteRowsWriter = new DeleteRowsWriter(timezone)
+  val insertRowsWriter = new InsertRowsWriter(timezone)
 
   def isClosed = {
     markClose.get()
@@ -177,8 +177,9 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
     val eventDeserializer = new EventDeserializer()
     eventDeserializer.setCompatibilityMode(
-      EventDeserializer.CompatibilityMode.DATE_AND_TIME_AS_LONG,
+      //EventDeserializer.CompatibilityMode.DATE_AND_TIME_AS_LONG,
       EventDeserializer.CompatibilityMode.CHAR_AND_BINARY_AS_BYTE_ARRAY
+      //EventDeserializer.CompatibilityMode.INVALID_DATE_AND_TIME_AS_MIN_VALUE
     )
     binaryLogClient.setEventDeserializer(eventDeserializer)
 
