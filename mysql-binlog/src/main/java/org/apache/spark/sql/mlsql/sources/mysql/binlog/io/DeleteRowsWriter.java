@@ -2,6 +2,7 @@ package org.apache.spark.sql.mlsql.sources.mysql.binlog.io;
 
 
 import com.github.shyiko.mysql.binlog.event.DeleteRowsEventData;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.MySQLCDCUtils;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.RawBinlogEvent;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.TableInfo;
@@ -16,9 +17,11 @@ import java.util.List;
 public class DeleteRowsWriter extends AbstractEventWriter {
 
     private String timeZone;
+    private Configuration hadoopConf;
 
-    public DeleteRowsWriter(String timeZone) {
+    public DeleteRowsWriter(String timeZone, Configuration hadoopConf) {
         this.timeZone = timeZone;
+        this.hadoopConf = hadoopConf;
     }
 
     @Override
@@ -47,7 +50,7 @@ public class DeleteRowsWriter extends AbstractEventWriter {
         int i = includedColumns.nextSetBit(0);
         jsonGenerator.writeStartObject();
         while (i != -1) {
-            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone);
+            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone,hadoopConf);
             String columnName = schemaTool.getColumnNameByIndex();
             if (row[i] != null) {
                 jsonGenerator.writeObjectField(columnName, MySQLCDCUtils.getWritableObject(schemaTool, row[i]));

@@ -25,31 +25,32 @@ class TestMySQL extends FunSuite {
       option("databaseNamePattern", "wow").
       option("tableNamePattern", "users").
       option("bingLogNamePrefix", "mysql-bin").
-      option("binlogIndex", "15").
-      option("binlogFileOffset", "85747").
+      option("binlogIndex", "1").
+      option("binlogFileOffset", "882").
+      option("binlog.field.decode.first_name", "UTF-8").
       load()
 
-    val query = df.writeStream.
-      format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
-      option("__path__", "/tmp/datalake/{db}/{table}").
-      option("path", "{db}/{table}").
-      option("mode", "Append").
-      option("idCols", "id").
-      option("duration", "3").
-      option("syncType", "binlog").
-      option("checkpointLocation", "/tmp/cpl-binlog4").
-      outputMode("append")
-      .trigger(Trigger.ProcessingTime("15 seconds"))
-      .start()
 //    val query = df.writeStream.
-//          format("console").
-//          option("mode", "Append").
-//          option("truncate", "false").
-//          option("numRows", "100000").
-//          option("checkpointLocation", "/tmp/cpl-mysql6").
-//          outputMode("append")
-//          .trigger(Trigger.ProcessingTime("10 seconds"))
-//          .start()
+//      format("org.apache.spark.sql.delta.sources.MLSQLDeltaDataSource").
+//      option("__path__", "/tmp/datalake/{db}/{table}").
+//      option("path", "{db}/{table}").
+//      option("mode", "Append").
+//      option("idCols", "id").
+//      option("duration", "3").
+//      option("syncType", "binlog").
+//      option("checkpointLocation", "/tmp/cpl-binlog4").
+//      outputMode("append")
+//      .trigger(Trigger.ProcessingTime("15 seconds"))
+//      .start()
+    val query = df.writeStream.
+          format("console").
+          option("mode", "Append").
+          option("truncate", "false").
+          option("numRows", "100000").
+          option("checkpointLocation", "/tmp/cpl-mysql6").
+          outputMode("append")
+          .trigger(Trigger.ProcessingTime("10 seconds"))
+          .start()
 
     query.awaitTermination()
   }

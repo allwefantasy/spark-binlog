@@ -26,8 +26,11 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * 2019-06-13 WilliamZhu(allwefantasy@gmail.com)
  */
-class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkpointDir: String, timezone: String,
-                                      hadoopConf: Configuration, isWriteAheadStorage: Boolean = true)
+class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T],
+                                      checkpointDir: String,
+                                      timezone: String,
+                                      hadoopConf: Configuration,
+                                      isWriteAheadStorage: Boolean = true)
   extends SocketServerInExecutor[T](taskContextRef, "binlog-socket-server-in-executor")
     with BinLogSocketServerSerDer with Logging {
 
@@ -70,9 +73,9 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
   private val currentQueueSize = new AtomicLong(0)
 
-  val updateRowsWriter = new UpdateRowsWriter(timezone)
-  val deleteRowsWriter = new DeleteRowsWriter(timezone)
-  val insertRowsWriter = new InsertRowsWriter(timezone)
+  val updateRowsWriter = new UpdateRowsWriter(timezone, hadoopConf)
+  val deleteRowsWriter = new DeleteRowsWriter(timezone, hadoopConf)
+  val insertRowsWriter = new InsertRowsWriter(timezone, hadoopConf)
 
   def isClosed = {
     markClose.get()
@@ -233,15 +236,15 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T], checkp
 
             } else currentTable = null
 
-          case _type if(isWrite(_type)) =>
+          case _type if (isWrite(_type)) =>
             if (!skipTable) addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.INSERT_EVENT)
 
-          case _type if(isUpdate(_type)) =>
+          case _type if (isUpdate(_type)) =>
             if (!skipTable) {
               addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.UPDATE_EVENT)
             }
 
-          case _type if(isDelete(_type)) =>
+          case _type if (isDelete(_type)) =>
             if (!skipTable) {
               addRecord(event, binaryLogClient.getBinlogFilename, EventInfo.DELETE_EVENT)
             }

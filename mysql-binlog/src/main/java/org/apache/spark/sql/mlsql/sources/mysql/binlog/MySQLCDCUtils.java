@@ -4,6 +4,7 @@ import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.io.SchemaTool;
 
 import java.io.Serializable;
+import java.nio.charset.Charset;
 import java.time.ZoneId;
 import java.util.TimeZone;
 
@@ -18,7 +19,7 @@ public class MySQLCDCUtils {
             return null;
         }
         if (value instanceof byte[]) {
-            return new String((byte[]) value);
+            return new String((byte[]) value, Charset.forName(schemaTool.charset()));
         }
         if (schemaTool.isTimestamp() && value instanceof java.sql.Timestamp) {
             java.sql.Timestamp item = (java.sql.Timestamp) value;

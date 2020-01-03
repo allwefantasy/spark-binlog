@@ -2,6 +2,7 @@ package org.apache.spark.sql.mlsql.sources.mysql.binlog.io;
 
 
 import com.github.shyiko.mysql.binlog.event.UpdateRowsEventData;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.MySQLCDCUtils;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.RawBinlogEvent;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.TableInfo;
@@ -18,8 +19,11 @@ public class UpdateRowsWriter extends AbstractEventWriter {
 
     private String timeZone;
 
-    public UpdateRowsWriter(String timeZone) {
+    private Configuration hadoopConf;
+
+    public UpdateRowsWriter(String timeZone, Configuration hadoopConf) {
         this.timeZone = timeZone;
+        this.hadoopConf = hadoopConf;
     }
 
     @Override
@@ -49,7 +53,7 @@ public class UpdateRowsWriter extends AbstractEventWriter {
         jsonGenerator.writeStartObject();
 
         while (i != -1) {
-            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone);
+            SchemaTool schemaTool = new SchemaTool(tableInfo.getSchema(), i, timeZone, hadoopConf);
             String columnName = schemaTool.getColumnNameByIndex();
             Serializable[] newRow = row.getValue();
             if (newRow != null) {
