@@ -29,9 +29,10 @@ public class DeleteWriter extends AbstractEventWriter {
             jsonGenerator.writeObjectField("rowkey", Bytes.toString(delete.getRow()));
             for (Map.Entry<byte[], List<Cell>> entry : delete.getFamilyCellMap().entrySet()) {
                 for (Cell cell : entry.getValue()) {
-                    String f = Bytes.toString(cell.getFamilyArray());
-                    String col = Bytes.toString(cell.getQualifierArray());
-                    jsonGenerator.writeObjectField(f + ":" + col, Bytes.toString(cell.getValueArray()));
+                    String f = Bytes.toString(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength());
+                    String col = Bytes.toString(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
+                    String dataValue = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                    jsonGenerator.writeObjectField(f + ":" + col, dataValue);
                 }
             }
 
