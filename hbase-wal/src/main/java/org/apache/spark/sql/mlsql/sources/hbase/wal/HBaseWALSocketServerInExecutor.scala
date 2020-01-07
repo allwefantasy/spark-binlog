@@ -93,7 +93,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
           flushAheadLog
         }
         val offsets = committedOffsets.asScala.
-          map(f => (f._1, LongOffset.convert(f._2).get.offset.toString))
+          map(f => (f._1, (LongOffset.convert(f._2).get.offset+1).toString))
         client.sendResponse(dOut, OffsetResponse(offsets.toMap))
       case RequestData(name, startOffset, endOffset) =>
         try {
