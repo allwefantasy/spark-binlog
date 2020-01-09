@@ -17,22 +17,14 @@ You can link against this library in your program at the following coordinates:
 
 ### Scala 2.11
 
-This is the latest stable version for MySQL binlog:
-
-```
-groupId: tech.mlsql
-artifactId: spark-binlog_2.11
-version: 0.2.2
-```
-
-This is the latest SNAPSHOT versions.
+This is the latest stable versions.
 
 MySQL Binlog:
 
 ```      
 groupId: tech.mlsql
 artifactId: mysql-binlog_2.11
-version: 1.0.0-SNAPSHOT
+version: 1.0.0
 ```
 
 HBase WAL:
@@ -40,7 +32,7 @@ HBase WAL:
 ```      
 groupId: tech.mlsql
 artifactId: hbase-wal_2.11
-version: 1.0.0-SNAPSHOT
+version: 1.0.0
 ```
 
 ## Limitation
