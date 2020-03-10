@@ -39,7 +39,16 @@ public class MySQLCDCUtils {
                 return bsValue.get(0) ? true : false;
             }
 
-            return bsValue.toLongArray();
+            if (schemaTool.isLong()) {
+                long longValue = 0;
+                byte[] by = bsValue.toByteArray();
+                for (int i = 0; i < by.length; i++)
+                {
+                    longValue += ((long) by[i] & 0xffL) << (8 * i);
+                }
+                return longValue;
+            }
+            throw new RuntimeException("cannot serializer for " + schemaTool.field().name());
         }
 
         if (schemaTool.isTimestamp() && value instanceof java.sql.Timestamp) {
