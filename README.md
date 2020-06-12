@@ -24,7 +24,7 @@ MySQL Binlog:
 ```      
 groupId: tech.mlsql
 artifactId: mysql-binlog_2.11
-version: 1.0.1
+version: 1.0.2
 ```
 
 HBase WAL:
@@ -32,7 +32,7 @@ HBase WAL:
 ```      
 groupId: tech.mlsql
 artifactId: hbase-wal_2.11
-version: 1.0.1
+version: 1.0.2
 ```
 
 ## Limitation
@@ -221,7 +221,7 @@ this means you should configure parameters like this:
 
 ```
 bingLogNamePrefix="mysql-bin"
-binlogFileOffset="14"
+binlogIndex="14"
 binlogFileOffset="34913156"
 ```
 
@@ -245,7 +245,9 @@ Trying to restore lost connectioin to .....
 Connected to ....
 ```
 
-Please check the server_id is configured in my.cnf of your MySQL Server. 
+Please check the server_id is configured in my.cnf of your MySQL Server.
+
+
   
 
  

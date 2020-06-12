@@ -7,7 +7,7 @@
     <groupId>tech.mlsql</groupId>
     <artifactId>spark-binlog_2.11</artifactId>
     <packaging>pom</packaging>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <modules>
         <module>binlog-common</module>
         <module>mysql-binlog</module>
@@ -55,17 +55,9 @@
 
         <spark.version>2.4.3</spark.version>
         <spark.bigversion>2.4</spark.bigversion>
-        <mlsql.version>1.2.0</mlsql.version>
-
-        <hbase.version>2.0.4</hbase.version>
-
-        <guava.version>16.0</guava.version>
         <httpclient.version>4.5.3</httpclient.version>
-
-        <serviceframework.version>2.0.3</serviceframework.version>
         <scope>provided</scope>
-        <hadoop-client-version>2.6.5</hadoop-client-version>
-        <common-utils.version>0.2.5</common-utils.version>
+        <common-utils.version>0.3.5</common-utils.version>
         <binlog.version>0.18.1</binlog.version>
         <hbase.version>2.0.4</hbase.version>
     </properties>
