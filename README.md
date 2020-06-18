@@ -234,9 +234,11 @@ mysqlbinlog \
 --base64-output=decode-rows \
 -vv  master-bin.000004
 
-```  
+```
 
 ## Questions
+
+## Q1
 
 People may meet some log like following:
 
@@ -246,6 +248,110 @@ Connected to ....
 ```
 
 Please check the server_id is configured in my.cnf of your MySQL Server.
+
+## Q2
+
+When you have started your stream to consume the binlog, but it seem nothong happen or just print :
+
+```
+Batch: N
+-------------------------------------------
++-----+
+|value|
++-----+
++-----+
+```
+
+Please check spark log:
+
+```
+20/06/18 11:57:00 INFO MicroBatchExecution: Streaming query made progress: {
+  "id" : "e999af90-8d0a-48e2-b9fc-fcf1e140f622",
+  "runId" : "547ce891-468a-43c5-bb62-614b38f60c39",
+  "name" : null,
+  "timestamp" : "2020-06-18T03:57:00.002Z",
+  "batchId" : 1,
+  "numInputRows" : 1,
+  "inputRowsPerSecond" : 0.4458314757021846,
+  "processedRowsPerSecond" : 2.9673590504451037,
+  "durationMs" : {
+    "addBatch" : 207,
+    "getBatch" : 3,
+    "getOffset" : 15,
+    "queryPlanning" : 10,
+    "triggerExecution" : 337,
+    "walCommit" : 63
+  },
+  "stateOperators" : [ ],
+  "sources" : [ {
+    "description" : "MLSQLBinLogSource(ExecutorBinlogServer(192.168.111.14,52612),....",
+    "startOffset" : 160000000004104,
+    "endOffset" : 170000000000154,
+    "numInputRows" : 0,
+    "inputRowsPerSecond" : 0,
+    "processedRowsPerSecond" : 0
+  } ],
+  "sink" : {
+    "description" : "org.apache.spark.sql.execution.streaming.ConsoleSinkProvider@4f82b82f"
+  }
+}
+```
+
+As we can see, the startOffset/f is changing but the  numInputRows is not chagned. Please try a table with a simple
+schema to make sure the binlog connection  works fine.
+
+If the simple schema table works fine, this is may caused by some special sql type. Please address an issue and
+paste spark log and your target table schema.
+
+You can use code like this to test in your local machine:
+
+```scala
+package tech.mlsql.test.binlogserver
+
+import java.sql.Timestamp
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.streaming.Trigger
+import org.scalatest.FunSuite
+
+
+object Main{
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+          .master("local[*]")
+          .appName("MySQL B Sync")
+          .getOrCreate()
+
+        val df = spark.readStream.
+          format("org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource").
+          option("host", "127.0.0.1").
+          option("port", "3306").
+          option("userName", "xxxx").
+          option("password", "xxxx").
+          option("databaseNamePattern", "wow").
+          option("tableNamePattern", "users").
+          option("bingLogNamePrefix", "mysql-bin").
+          option("binlogIndex", "16").
+          option("binlogFileOffset", "3869").
+          option("binlog.field.decode.first_name", "UTF-8").
+          load()
+
+        // print the binlog(json format)
+        val query = df.writeStream.
+              format("console").
+              option("mode", "Append").
+              option("truncate", "false").
+              option("numRows", "100000").
+              option("checkpointLocation", "/tmp/cpl-mysql6").
+              outputMode("append")
+              .trigger(Trigger.ProcessingTime("10 seconds"))
+              .start()
+
+        query.awaitTermination()
+  }
+}
+
+```
 
 
   
