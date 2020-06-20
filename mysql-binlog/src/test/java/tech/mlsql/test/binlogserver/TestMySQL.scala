@@ -24,9 +24,9 @@ class TestMySQL extends FunSuite {
       option("password", "mlsql").
       option("databaseNamePattern", "wow").
       option("tableNamePattern", "users").
-      option("bingLogNamePrefix", "mysql-bin").
-      option("binlogIndex", "16").
-      option("binlogFileOffset", "3869").
+//      option("bingLogNamePrefix", "mysql-bin").
+//      option("binlogIndex", "16").
+//      option("binlogFileOffset", "3869").
       option("binlog.field.decode.first_name", "UTF-8").
       load()
 

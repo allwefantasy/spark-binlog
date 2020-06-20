@@ -3,6 +3,7 @@ package org.apache.spark.sql.mlsql.sources
 import java.io._
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.sql.ResultSet
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.{Locale, UUID}
 
@@ -54,12 +55,14 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
 
     val spark = sqlContext.sparkSession
     val timezoneID = spark.sessionState.conf.sessionLocalTimeZone
-    val logPrefix = parameters.getOrElse("logPrefix", "")
+
     val bingLogHost = parameters("host")
     val bingLogPort = parameters("port").toInt
     val bingLogUserName = parameters("userName")
     val bingLogPassword = parameters("password")
-    val bingLogNamePrefix = parameters.get("bingLogNamePrefix")
+
+
+    var bingLogNamePrefix = parameters.get("bingLogNamePrefix")
 
     val databaseNamePattern = parameters.get("databaseNamePattern")
     val tableNamePattern = parameters.get("tableNamePattern")
@@ -70,7 +73,27 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
         (parameters.get("binlogIndex"), parameters.get("binlogFileOffset")) match {
           case (Some(index), Some(pos)) => Option(BinlogOffset(index.toLong, pos.toLong).offset.toString)
           case (Some(index), None) => Option(BinlogOffset(index.toLong, 4).offset.toString)
-          case _ => None
+          case _ =>
+            var prefix: Option[String] = None
+            var index: Option[Long] = None
+            var pos: Option[Long] = None
+
+            val tempConn = new MySQLConnection(bingLogHost, bingLogPort, bingLogUserName, bingLogPassword)
+            tempConn.query("show master status;", new MySQLConnection.Callback[ResultSet] {
+              override def execute(rs: ResultSet): Unit = {
+                if (rs.next()) {
+                  val file = rs.getString("File")
+                  pos = Option(rs.getLong("Position"))
+                  val Array(_prefix, _index) = file.split("\\.")
+                  prefix = Option(_prefix)
+                  index = Option(_index.toLong)
+                }
+              }
+            })
+            logInfo(s"Auto get prefix[${prefix}]: index:[${index}] pos:${pos}")
+            if (prefix == None || index == None || pos == None) None
+            bingLogNamePrefix = prefix
+            Option(BinlogOffset(index.get, pos.get).offset.toString)
         }
     }).map(f => LongOffset(f.toLong))
 

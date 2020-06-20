@@ -59,5 +59,5 @@ public abstract class AbstractEventWriter {
         return JSON_FACTORY.createGenerator(out);
     }
 
-    public abstract java.util.List<String> writeEvent(RawBinlogEvent event);
+    public abstract java.util.List<String> writeEvent(RawBinlogEvent event)  throws IOException;
 }

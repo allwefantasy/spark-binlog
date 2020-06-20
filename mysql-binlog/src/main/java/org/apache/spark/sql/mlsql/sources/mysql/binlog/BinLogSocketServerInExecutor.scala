@@ -312,13 +312,14 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T],
       case "delete" => deleteRowsWriter
     }
 
-    val jsonList = try {
-      writer.writeEvent(rawBinlogEvent)
-    } catch {
-      case e: Exception =>
-        logError("", e)
-        new util.ArrayList[String]()
-    }
+    val jsonList = writer.writeEvent(rawBinlogEvent)
+//    try {
+//
+//    } catch {
+//      case e: Exception =>
+//        logError("", e)
+//        new util.ArrayList[String]()
+//    }
     jsonList
   }
 

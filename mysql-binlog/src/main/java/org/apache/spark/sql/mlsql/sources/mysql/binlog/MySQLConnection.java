@@ -1,4 +1,4 @@
-package tech.mlsql.test.binlogserver;
+package org.apache.spark.sql.mlsql.sources.mysql.binlog;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -27,14 +27,7 @@ public final class MySQLConnection implements Closeable {
 
     private void connect() throws SQLException {
         this.connection = DriverManager.getConnection("jdbc:mysql://" + hostname + ":" + port +
-                "?serverTimezone=UTC", username, password);
-        execute(new Callback<Statement>() {
-
-            @Override
-            public void execute(Statement statement) throws SQLException {
-                statement.execute("SET time_zone = '+00:00'");
-            }
-        });
+                "?useUnicode=true&zeroDateTimeBehavior=convertToNull&characterEncoding=UTF-8&tinyInt1isBit=false", username, password);
     }
 
     public String hostname() {
