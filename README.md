@@ -54,9 +54,6 @@ host="127.0.0.1"
 and port="3306"
 and userName="xxxxx"
 and password="xxxxx"
-and bingLogNamePrefix="mysql-bin"
-and binlogIndex="4"
-and binlogFileOffset="4"
 and databaseNamePattern="mlsql_console"
 and tableNamePattern="script_file"
 as table1;
@@ -86,9 +83,6 @@ val df = spark.readStream.
   option("password","123456").
   option("databaseNamePattern","test").
   option("tableNamePattern","mlsql_binlog").
-  option("bingLogNamePrefix","mysql-bin").
-  option("binlogIndex","10").
-  option("binlogFileOffset","90840").
   load()
 
 val query = df.writeStream.
@@ -196,9 +190,17 @@ We hope we can support more DBs including traditional DB e.g Oracle and
 NoSQL e.g. HBase(WAL),ES,Cassandra in future.  
 
 
-## How to get the initial offset 
+## How to get the initial offset
 
-If you are the first time to start spark-binlog, use command like following to get the offset you want:
+You can mannually set binlog offset, For example:
+
+```
+bingLogNamePrefix="mysql-bin"
+binlogIndex="4"
+binlogFileOffset="4"
+```
+
+Try using command like following to get the offset you want:
 
 ```
 mysql> show master status;
