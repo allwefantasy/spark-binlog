@@ -26,6 +26,9 @@ public class MySQLCDCUtils {
 
 
     public static Object getWritableObject(SchemaTool schemaTool, Serializable value) {
+//        if(true){
+//            throw new RuntimeException("----");
+//        }
         if (value == null) {
             return null;
         }

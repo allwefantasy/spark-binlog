@@ -313,13 +313,13 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T],
     }
 
     val jsonList = writer.writeEvent(rawBinlogEvent)
-//    try {
-//
-//    } catch {
-//      case e: Exception =>
-//        logError("", e)
-//        new util.ArrayList[String]()
-//    }
+    //    try {
+    //
+    //    } catch {
+    //      case e: Exception =>
+    //        logError("", e)
+    //        new util.ArrayList[String]()
+    //    }
     jsonList
   }
 
@@ -459,6 +459,7 @@ class BinLogSocketServerInExecutor[T](taskContextRef: AtomicReference[T],
           } catch {
             case e: Exception =>
               logError("", e)
+              close
           }
         //          sendResponse(dOut, DataResponse(res.toList))
       }
