@@ -25,21 +25,17 @@ public class InsertRowsWriter extends AbstractEventWriter {
     }
 
     @Override
-    public List<String> writeEvent(RawBinlogEvent event) {
+    public List<String> writeEvent(RawBinlogEvent event) throws IOException{
         WriteRowsEventData data = event.getEvent().getData();
         List<String> items = new ArrayList<>();
 
         for (Serializable[] row : data.getRows()) {
-            try {
-                StringWriter writer = new StringWriter();
-                startJson(writer, event);
-                final BitSet bitSet = data.getIncludedColumns();
-                writeRow(event.getTableInfo(), row, bitSet);
-                endJson();
-                items.add(writer.toString());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            StringWriter writer = new StringWriter();
+            startJson(writer, event);
+            final BitSet bitSet = data.getIncludedColumns();
+            writeRow(event.getTableInfo(), row, bitSet);
+            endJson();
+            items.add(writer.toString());
         }
         return items;
     }

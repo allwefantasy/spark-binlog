@@ -28,6 +28,18 @@ class SchemaTool(json: String, index: Int, _timeZone: String, hadoopConf: Config
     schema(index).dataType == DateType
   }
 
+  def isBoolean() = {
+    schema(index).dataType == BooleanType
+  }
+
+  def isLong() = {
+    schema(index).dataType == LongType
+  }
+
+  def field = {
+    schema(index)
+  }
+
   def charset: String = {
     val allType = hadoopConf.get(s"binlog.field.decode.*")
     if (allType != null) {

@@ -1,4 +1,4 @@
-package tech.mlsql.test.binlogserver;
+package org.apache.spark.sql.mlsql.sources.mysql.binlog;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -27,14 +27,7 @@ public final class MySQLConnection implements Closeable {
 
     private void connect() throws SQLException {
         this.connection = DriverManager.getConnection("jdbc:mysql://" + hostname + ":" + port +
-                "?serverTimezone=UTC", username, password);
-        execute(new Callback<Statement>() {
-
-            @Override
-            public void execute(Statement statement) throws SQLException {
-                statement.execute("SET time_zone = '+00:00'");
-            }
-        });
+                "?useUnicode=true&zeroDateTimeBehavior=convertToNull&characterEncoding=UTF-8&tinyInt1isBit=false", username, password);
     }
 
     public String hostname() {
@@ -56,6 +49,19 @@ public final class MySQLConnection implements Closeable {
     public void execute(Callback<Statement> callback, boolean autocommit) throws SQLException {
         connection.setAutoCommit(autocommit);
         Statement statement = connection.createStatement();
+        try {
+            callback.execute(statement);
+            if (!autocommit) {
+                connection.commit();
+            }
+        } finally {
+            statement.close();
+        }
+    }
+
+    public void executePrepare(String sql, Callback<PreparedStatement> callback, boolean autocommit) throws SQLException {
+        connection.setAutoCommit(autocommit);
+        PreparedStatement statement = connection.prepareStatement(sql);
         try {
             callback.execute(statement);
             if (!autocommit) {
