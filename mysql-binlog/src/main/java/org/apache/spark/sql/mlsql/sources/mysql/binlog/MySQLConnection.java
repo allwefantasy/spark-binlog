@@ -59,6 +59,19 @@ public final class MySQLConnection implements Closeable {
         }
     }
 
+    public void executePrepare(String sql, Callback<PreparedStatement> callback, boolean autocommit) throws SQLException {
+        connection.setAutoCommit(autocommit);
+        PreparedStatement statement = connection.prepareStatement(sql);
+        try {
+            callback.execute(statement);
+            if (!autocommit) {
+                connection.commit();
+            }
+        } finally {
+            statement.close();
+        }
+    }
+
     public void execute(Callback<Statement> callback) throws SQLException {
         execute(callback, false);
     }
