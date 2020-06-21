@@ -7,7 +7,7 @@
     <groupId>tech.mlsql</groupId>
     <artifactId>spark-binlog_2.11</artifactId>
     <packaging>pom</packaging>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <modules>
         <module>binlog-common</module>
         <module>mysql-binlog</module>

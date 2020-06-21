@@ -24,7 +24,7 @@ MySQL Binlog:
 ```      
 groupId: tech.mlsql
 artifactId: mysql-binlog_2.11
-version: 1.0.3
+version: 1.0.4
 ```
 
 HBase WAL:
@@ -32,7 +32,7 @@ HBase WAL:
 ```      
 groupId: tech.mlsql
 artifactId: hbase-wal_2.11
-version: 1.0.3
+version: 1.0.4
 ```
 
 ## Limitation
