@@ -26,8 +26,10 @@ public final class MySQLConnection implements Closeable {
     }
 
     private void connect() throws SQLException {
-        this.connection = DriverManager.getConnection("jdbc:mysql://" + hostname + ":" + port +
-                "?useUnicode=true&zeroDateTimeBehavior=convertToNull&characterEncoding=UTF-8&tinyInt1isBit=false", username, password);
+        String connectURL = "jdbc:mysql://" + hostname + ":" + port +
+                "?useUnicode=true&zeroDateTimeBehavior=convertToNull&characterEncoding=UTF-8&tinyInt1isBit=false";
+        System.out.println(connectURL);
+        this.connection = DriverManager.getConnection(connectURL, username, password);
     }
 
     public String hostname() {
