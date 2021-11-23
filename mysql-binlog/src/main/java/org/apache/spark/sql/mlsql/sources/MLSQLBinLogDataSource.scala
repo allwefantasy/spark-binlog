@@ -9,6 +9,7 @@ import java.util.{Locale, UUID}
 
 import com.github.shyiko.mysql.binlog.network.ServerException
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -22,7 +23,6 @@ import org.apache.spark.util.{SerializableConfiguration, TaskCompletionListener,
 import org.apache.spark.{SparkEnv, TaskContext}
 import tech.mlsql.common.utils.hdfs.HDFSOperator
 import tech.mlsql.common.utils.path.PathFun
-
 
 /**
  * This Datasource is used to consume MySQL binlog. Not support MariaDB yet because the connector we are using is
@@ -109,24 +109,31 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     val checkPointDir = metadataPath.stripSuffix("/").split("/").
       dropRight(2).mkString("/")
 
-    def getOffsetFromCk = {
-      val offsetPath = PathFun(checkPointDir).
-        add("offsets").
-        toPath
+    def getOffsetFromCk: Option[Long] = {
+      // [bugfix] checkpointLocation:offsets is not a valid DFS filename. reason: File.pathSeparator is ':' or ';'
+      // val offsetPath = PathFun(checkPointDir).add("offsets").toPath
+      val offsetPath = new Path(checkPointDir.stripSuffix(Path.SEPARATOR), "offsets").toString
+      logInfo(s"from checkpoint accquire offsetPath: ${offsetPath}")
 
-      val lastFile = HDFSOperator.listFiles(offsetPath)
+      val files = HDFSOperator.listFiles(offsetPath)
+      if (files.isEmpty) {
+        logInfo(s"OffsetPath: ${offsetPath} checkpoint not found!")
+        return None
+      }
+      val lastFile = files
         .filterNot(f => f.getPath.getName.endsWith(".tmp.crc") || f.getPath.getName.endsWith(".tmp"))
-        .map { fileName =>
-          (fileName.getPath.getName.split("/").last.toInt, fileName.getPath)
-        }
-        .sortBy(f => f._1).last._2
-
+        .map { fileName => (fileName.getPath.getName.split("/").last.toInt, fileName.getPath) }
+        .sortBy(f => f._1)
+        .last._2
       val content = HDFSOperator.readFile(lastFile.toString)
-      content.split("\n").last.toLong
+      Some(content.split("\n").last.toLong)
     }
 
     val offsetFromCk = try {
-      Option(LongOffset(getOffsetFromCk))
+      getOffsetFromCk match {
+        case Some(checkponit) => Option(LongOffset(checkponit))
+        case _ => None
+      }
     } catch {
       case e: Exception =>
         logError(e.getMessage, e)
@@ -181,30 +188,31 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
           ex.printStackTrace()
         }
 
-        def sendStopBinlogServerRequest = {
-          // send signal to stop server
-          val socket2 = new Socket(executorBinlogServer.host, executorBinlogServer.port)
-          val dout2 = new DataOutputStream(socket2.getOutputStream)
-          BinLogSocketServerCommand.sendRequest(dout2,
-            ShutdownBinlogServer())
-          socket2.close()
-        }
-
+        /**
+         * Add callback logic code about closing binlog server when spark task goes wrong.
+         */
         TaskContext.get().addTaskFailureListener(new TaskFailureListener {
           override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
             taskContextRef.set(null)
-            sendStopBinlogServerRequest
-
+            val socket = new Socket(executorBinlogServer.host, executorBinlogServer.port)
+            val out = new DataOutputStream(socket.getOutputStream)
+            BinLogSocketServerCommand.sendRequest(out, ShutdownBinlogServer())
+            socket.close()
           }
         })
 
+        /**
+         * Add callback logic code about closing binlog server when spark task has been done.
+         */
         TaskContext.get().addTaskCompletionListener(new TaskCompletionListener {
           override def onTaskCompletion(context: TaskContext): Unit = {
             taskContextRef.set(null)
-            sendStopBinlogServerRequest
+            val socket = new Socket(executorBinlogServer.host, executorBinlogServer.port)
+            val out = new DataOutputStream(socket.getOutputStream)
+            BinLogSocketServerCommand.sendRequest(out, ShutdownBinlogServer())
+            socket.close()
           }
         })
-
 
         val socket = new Socket(tempSocketServerHost, tempSocketServerPort)
         val dout = new DataOutputStream(socket.getOutputStream)
@@ -252,7 +260,7 @@ class MLSQLBinLogDataSource extends StreamSourceProvider with DataSourceRegister
     MLSQLBinLogSource(executorBinlogServer, sqlContext.sparkSession, metadataPath, finalStartingOffsets, parameters ++ Map("binlogServerId" -> binlogServerId))
   }
 
-  override def shortName(): String = "mysql-binglog"
+  override def shortName(): String = "mysql-binlog"
 }
 
 /**
@@ -317,7 +325,7 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
         if (content(0) == 'v') {
           val indexOfNewLine = content.indexOf("\n")
           if (indexOfNewLine > 0) {
-            val version = parseVersion(content.substring(0, indexOfNewLine), VERSION)
+            val version = validateVersion(content.substring(0, indexOfNewLine), VERSION)
             LongOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
           } else {
             throw new IllegalStateException(
@@ -348,6 +356,17 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
     LongOffset(response.currentOffset)
   }
 
+  /**
+   * Convert generic Offset to LongOffset if possible
+   * Note: Since spark 3.1 started, the object class of LongOffset removed the convert method and added this method for code consistency
+   * @return converted LongOffset
+   */
+  def convert(offset: Offset): Option[LongOffset] = offset match {
+    case lo: LongOffset => Some(lo)
+    case so: SerializedOffset => Some(LongOffset(so))
+    case _ => None
+  }
+
   override def getOffset: Option[Offset] = {
     synchronized {
       if (initialized.compareAndSet(false, true)) {
@@ -368,7 +387,7 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
 
     initialPartitionOffsets
 
-    val untilPartitionOffsets = LongOffset.convert(end)
+    val untilPartitionOffsets = convert(end)
 
     // On recovery, getBatch will get called before getOffset
     if (currentPartitionOffsets.isEmpty) {
@@ -383,10 +402,8 @@ case class MLSQLBinLogSource(executorBinlogServer: ExecutorBinlogServer,
     // once we have changed checkpoint path, then we can start from provided starting offset.
     // In normal case, we will recover the start from checkpoint offset directory
     val fromPartitionOffsets = start match {
-      case Some(prevBatchEndOffset) =>
-        LongOffset.convert(prevBatchEndOffset)
-      case None =>
-        Some(initialPartitionOffsets)
+      case Some(prevBatchEndOffset) => convert(prevBatchEndOffset)
+      case None => Some(initialPartitionOffsets)
     }
 
     val executorBinlogServerCopy = executorBinlogServer.copy()

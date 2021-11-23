@@ -23,16 +23,16 @@ MySQL Binlog:
 
 ```      
 groupId: tech.mlsql
-artifactId: mysql-binlog_2.11
-version: 1.0.4
+artifactId: mysql-binlog_2.12
+version: 1.0.5
 ```
 
 HBase WAL:
 
 ```      
 groupId: tech.mlsql
-artifactId: hbase-wal_2.11
-version: 1.0.4
+artifactId: hbase-wal_2.12
+version: 1.0.5
 ```
 
 ## Limitation
@@ -355,6 +355,7 @@ object Main{
 
 ```
 
+If you try the above code, it doesn't work! You need to check whether MySQL connector Java dependency (mysql-connector-java) is introduced.
 
 
 

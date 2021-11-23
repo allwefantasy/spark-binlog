@@ -3,10 +3,10 @@ package tech.mlsql.test.binlogserver
 import java.io.File
 import java.sql.{ResultSet, SQLException, Statement}
 import java.util.TimeZone
-
 import net.sf.json.JSONObject
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.mlsql.sources.MLSQLBinLogDataSource
 import org.apache.spark.sql.mlsql.sources.mysql.binlog._
@@ -14,6 +14,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataSetHelper, SaveMode}
+import org.scalatest.{Args, ConfigMap, Filter, Status, Suite, TestData}
 import org.scalatest.time.SpanSugar._
 import tech.mlsql.common.utils.lang.sc.ScalaReflect
 
@@ -99,13 +100,11 @@ trait BaseBinlogTest extends StreamTest {
       .option("driver", s"com.mysql.jdbc.Driver")
       .option("dbtable", s"script_file").load().write.format(delta).mode(SaveMode.Overwrite).save(path)
   }
-
 }
 
-
-class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
+trait BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
   def deserializeSchema(json: String): StructType = {
-    Try(DataType.fromJson(json)).getOrElse(LegacyTypeStringParser.parse(json)) match {
+    Try(DataType.fromJson(json)).getOrElse(LegacyTypeStringParser.parseString(json)) match {
       case t: StructType => t
       case _ => throw new RuntimeException(s"Failed parsing StructType: $json")
     }
@@ -114,7 +113,7 @@ class BinlogSuite extends BaseBinlogTest with BinLogSocketServerSerDer {
   object TriggerData {
     def apply(source: Source, f: () => Unit) = {
       new TriggerData(source) {
-        override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
+        override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
           f()
           (source, source.getOffset.get)
         }
