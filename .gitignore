@@ -2,3 +2,5 @@ target/
 .idea/
 spark-binlog.iml
 release.sh
+*.iml
+*/*.iml

@@ -3,7 +3,7 @@ package org.apache.spark.sql.mlsql.sources.mysql.binlog;
 import com.github.shyiko.mysql.binlog.event.Event;
 import com.github.shyiko.mysql.binlog.event.EventHeaderV4;
 import org.apache.spark.sql.execution.streaming.LongOffset;
-import org.apache.spark.sql.sources.v2.reader.streaming.Offset;
+import org.apache.spark.sql.execution.streaming.Offset;
 import org.apache.spark.streaming.RawEvent;
 
 public class RawBinlogEvent implements RawEvent {

@@ -1,7 +1,8 @@
 package tech.mlsql.binlog.common
 
-import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.Offset
+import org.apache.spark.sql.execution.streaming.SerializedOffset
+import org.apache.spark.sql.execution.streaming.{Offset => OffsetV2}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 

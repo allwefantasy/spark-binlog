@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import org.apache.commons.lang3.time.FastDateFormat;
+import org.apache.spark.sql.catalyst.json.JSONOptions;
 import org.apache.spark.sql.mlsql.sources.mysql.binlog.io.SchemaTool;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.nio.charset.Charset;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Locale;
 import java.util.TimeZone;
 
 /**
@@ -56,7 +58,9 @@ public class MySQLCDCUtils {
 
         if (schemaTool.isTimestamp() && value instanceof java.sql.Timestamp) {
             java.sql.Timestamp item = (java.sql.Timestamp) value;
-            FastDateFormat timestampFormat = JsonOptions.options(schemaTool.timeZone()).timestampFormat();
+            JSONOptions options = JsonOptions.options(schemaTool.timeZone());
+            FastDateFormat timestampFormat = FastDateFormat.getInstance(options.timestampFormat(),
+                TimeZone.getTimeZone(options.zoneId()), options.locale());
             return timestampFormat.format(item);
         }
 
@@ -64,19 +68,23 @@ public class MySQLCDCUtils {
         if (schemaTool.isTimestamp() && value instanceof java.util.Date) {
             org.joda.time.DateTime item = new org.joda.time.DateTime((java.util.Date) value);
             int offset = TimeZone.getTimeZone(ZoneId.of(schemaTool.timeZone())).getRawOffset();
-            FastDateFormat timestampFormat = JsonOptions.options(schemaTool.timeZone()).timestampFormat();
+            JSONOptions options = JsonOptions.options(schemaTool.timeZone());
+            FastDateFormat timestampFormat = FastDateFormat.getInstance(options.timestampFormat(),
+                TimeZone.getTimeZone(options.zoneId()), options.locale());
             return timestampFormat.format(item.minusMillis(offset).toDate());
         }
 
         if (schemaTool.isDate() && value instanceof java.sql.Date) {
             java.sql.Date item = (java.sql.Date) value;
-            FastDateFormat dateFormat = JsonOptions.options(schemaTool.timeZone()).dateFormat();
+            JSONOptions options = JsonOptions.options(schemaTool.timeZone());
+            FastDateFormat dateFormat = FastDateFormat.getInstance(options.dateFormat(), options.locale());
             return dateFormat.format(item);
         }
 
         if (schemaTool.isDate() && value instanceof java.util.Date) {
             java.util.Date item = (java.util.Date) value;
-            FastDateFormat dateFormat = JsonOptions.options(schemaTool.timeZone()).dateFormat();
+            JSONOptions options = JsonOptions.options(schemaTool.timeZone());
+            FastDateFormat dateFormat = FastDateFormat.getInstance(options.dateFormat(), options.locale());
             return dateFormat.format(item);
         }
 

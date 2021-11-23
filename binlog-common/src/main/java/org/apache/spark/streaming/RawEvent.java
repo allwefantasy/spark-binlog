@@ -1,6 +1,6 @@
 package org.apache.spark.streaming;
 
-import org.apache.spark.sql.sources.v2.reader.streaming.Offset;
+import org.apache.spark.sql.execution.streaming.Offset;
 
 import java.io.Serializable;
 

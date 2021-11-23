@@ -4,10 +4,9 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.util
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkEnv
-import org.apache.spark.sql.execution.streaming.{LongOffset, Offset}
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, SerializedOffset}
 import org.apache.spark.sql.mlsql.sources.hbase.wal.io.{DeleteWriter, PutWriter}
 import org.apache.spark.streaming.RawEvent
 import tech.mlsql.binlog.common.OriginalSourceServerInExecutor
@@ -83,6 +82,17 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
     jsonList
   }
 
+  /**
+   * Convert generic Offset to LongOffset if possible
+   * Note: Since spark 3.1 started, the object class of LongOffset removed the convert method and added this method for code consistency
+   * @return converted LongOffset
+   */
+  def convert(offset: Offset): Option[LongOffset] = offset match {
+    case lo: LongOffset => Some(lo)
+    case so: SerializedOffset => Some(LongOffset(so))
+    case _ => None
+  }
+
   override def process(dIn: DataInputStream, dOut: DataOutputStream): Unit = {
     client.readRequest(dIn) match {
       case _: NooopsRequest =>
@@ -93,7 +103,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
           flushAheadLog
         }
         val offsets = committedOffsets.asScala.
-          map(f => (f._1, (LongOffset.convert(f._2).get.offset+1).toString))
+          map(f => (f._1, (convert(f._2).get.offset+1).toString))
         client.sendResponse(dOut, OffsetResponse(offsets.toMap))
       case RequestData(name, startOffset, endOffset) =>
         try {
@@ -180,7 +190,7 @@ class HBaseWALSocketServerInExecutor[T](taskContextRef: AtomicReference[T], chec
     require(a != null || b != null, "two offsets should not be null at the same time ")
     if (a == null) true
     else if (b == null) false
-    else LongOffset.convert(a).get.offset < LongOffset.convert(b).get.offset
+    else convert(a).get.offset < convert(b).get.offset
   }
 }
 
