@@ -49,15 +49,27 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.11.8</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
-        <scala.jline.version>2.11.0-M3</scala.jline.version>
 
+
+        <!-- spark 2.4 start -->
+        <scala.version>2.11.12</scala.version>
+        <scala.binary.version>2.12</scala.binary.version>
         <spark.version>2.4.3</spark.version>
         <spark.bigversion>2.4</spark.bigversion>
+        <scalatest.version>3.0.3</scalatest.version>
+        <!-- spark 2.4 end -->
+
+        <!-- spark 3.0 start -->
+        <!--        <scala.version>2.12.10</scala.version>-->
+        <!--        <scala.binary.version>2.12</scala.binary.version>-->
+        <!--        <spark.version>3.1.1</spark.version>-->
+        <!--        <spark.bigversion>3.0</spark.bigversion>-->
+        <!--        <scalatest.version>3.0.3</scalatest.version>-->
+        <!-- spark 3.0 end -->
+
         <httpclient.version>4.5.3</httpclient.version>
         <scope>provided</scope>
-        <common-utils.version>0.3.5</common-utils.version>
+        <common-utils.version>0.3.9.4</common-utils.version>
         <binlog.version>0.18.1</binlog.version>
         <hbase.version>2.0.4</hbase.version>
     </properties>
